@@ -36,7 +36,7 @@ const sampleData = {
 const els = {
   brandName: $('#brandName'), saveStatus: $('#saveStatus'), memberSummary: $('#memberSummary'), memberSidebar: $('#memberSidebar'), clearMemberSearch: $('#clearMemberSearch'), memberList: $('#memberList'), memberSearch: $('#memberSearch'), listCount: $('#listCount'), sortMembers: $('#sortMembers'), validationBadge: $('#validationBadge'), validationSummary: $('#validationSummary'), validationDialog: $('#validationDialog'), validationContent: $('#validationContent'), driveLinkButton: $('#driveLinkButton'), driveLinkDialog: $('#driveLinkDialog'), driveLinkInput: $('#driveLinkInput'), driveLinkOutput: $('#driveLinkOutput'), driveLinkError: $('#driveLinkError'), copyDriveLinkButton: $('#copyDriveLinkButton'), copyDriveLinkLabel: $('#copyDriveLinkLabel'), scriptButton: $('#scriptButton'), clearMembersButton: $('#clearMembersButton'), scriptDialog: $('#scriptDialog'), scriptInput: $('#scriptInput'), scriptCheck: $('#scriptCheck'), scriptRun: $('#scriptRun'), scriptClear: $('#scriptClear'), scriptHelp: $('#scriptHelp'), scriptStatus: $('#scriptStatus'), scriptHelpDialog: $('#scriptHelpDialog'), detailSidebar: $('#detailSidebar'), familyTitle: $('#familyTitle'), familyDescription: $('#familyDescription'), editFamilyNameButton: $('#editFamilyNameButton'), treeContext: $('#treeContext'), pushGenerationButton: $('#pushGenerationButton'), clearSelection: $('#clearSelection'), treeViewport: $('#treeViewport'), treeSvg: $('#familyTree'), treeLoading: $('#treeLoading'), undoButton: $('#undoButton'), redoButton: $('#redoButton'), generationRail: $('#generationRail'), editorDialog: $('#editorDialog'), memberForm: $('#memberForm'), formKicker: $('#formKicker'), formTitle: $('#formTitle'), formError: $('#formError'), formImagePreview: $('#formImagePreview'), relationshipDialog: $('#relationshipDialog'), relationshipForm: $('#relationshipForm'), relationshipTitle: $('#relationshipTitle'), relationSearch: $('#relationSearch'), relationshipOptions: $('#relationshipOptions'), relationshipTarget: $('#relationshipTarget'), confirmRelationship: $('#confirmRelationship'), settingsDialog: $('#settingsDialog'), settingsForm: $('#settingsForm'), settingsKicker: $('#settingsKicker'), settingsTitle: $('#settingsTitle'), rootPersonSelect: $('#rootPersonSelect'), exportDialog: $('#exportDialog'), passwordDialog: $('#passwordDialog'), passwordForm: $('#passwordForm'), passwordError: $('#passwordError'), publishOnlineButton: $('#publishOnlineButton'), publishDialog: $('#publishDialog'), publishForm: $('#publishForm'), publishError: $('#publishError'), publishProgress: $('#publishProgress'), publishSubmitButton: $('#publishSubmitButton'), initialSyncDialog: $('#initialSyncDialog'), initialSyncForm: $('#initialSyncForm'), initialSyncStatus: $('#initialSyncStatus'), initialSyncVersion: $('#initialSyncVersion'), initialSyncPassword: $('#initialSyncPassword'), initialSyncError: $('#initialSyncError'), initialSyncSubmitButton: $('#initialSyncSubmitButton'), initialDraftButton: $('#initialDraftButton'), initialSampleButton: $('#initialSampleButton'), importFile: $('#importFile'), memberImageInput: $('#memberImageInput'), saveDraftButton: $('#saveDraftButton'), toast: $('#toast')
 };
-let data = clone(sampleData); let driveCopyTimer; let graph; let renderer; let selectedPersonId = null; let profilePersonId = null; let activeGeneration = null; let editingId = null; let relationType = null; let relationSelectedIds = new Set(); let past = []; let future = []; let dirty = false; let toastTimer; let settingsNameOnly = false; let scriptSeedLoaded = false; let publishTokenSession = '';
+let data = clone(sampleData); let driveCopyTimer; let graph; let renderer; let selectedPersonId = null; let profilePersonId = null; let activeGeneration = null; let editingId = null; let relationType = null; let relationSelectedIds = new Set(); let past = []; let future = []; let dirty = false; let toastTimer; let settingsNameOnly = false; let scriptSeedLoaded = false; let publishTokenSession = ''; let viewerPassword = '';
 let editorState = 'initialLoading'; let pendingStartupData = null; let serverDataVersion = null; let loadedDataVersion = null; let loadedDataSource = null; let preserveRecoveryOnce = false; let startupLocalWork = null; let imageTargetMemberId = null;
 const pendingImageChanges = new Map();
 const pendingImageDeletes = new Set();
@@ -359,6 +359,7 @@ async function handleInitialSync(event) {
   els.initialSyncSubmitButton.disabled = true;
   try {
     const candidate = await decryptPreparedData(pendingStartupData, password, normaliseAndValidateLoadedData);
+    viewerPassword = password;
     applyStartupData(candidate, pendingStartupData);
     els.initialSyncDialog.close();
   } catch (error) {
@@ -370,6 +371,7 @@ async function handleInitialSync(event) {
 }
 
 function startWithSampleData() {
+  viewerPassword = '';
   applyStartupData(clone(sampleData), { source: 'sample', version: null });
   els.initialSyncDialog.close();
   showToast('Đang dùng dữ liệu mẫu. Hãy nhập hoặc tải data.enc trước khi publish.');
@@ -471,9 +473,9 @@ async function handlePublish(event) {
   if (validation.errors.length) { els.publishDialog.close(); els.validationDialog.showModal(); return; }
   const form = new FormData(els.publishForm);
   const token = String(form.get('publishToken') || '').trim();
-  const password = String(form.get('password') || '');
+  const password = viewerPassword;
   if (!token) { els.publishError.textContent = 'Hãy nhập Publish Token.'; return; }
-  if (password.length < 8) { els.publishError.textContent = 'Mật khẩu cần ít nhất 8 ký tự.'; return; }
+  if (password.length < 8) { els.publishError.textContent = 'Chưa có mật khẩu Viewer từ bước khởi động Editor.'; return; }
   let pendingImages;
   try { pendingImages = collectPendingImages(); } catch (error) {
     els.publishError.textContent = error?.message?.startsWith('image-name-collision:') ? `Trùng filename ảnh: ${error.message.slice('image-name-collision:'.length)}` : 'Không thể xác định filename ảnh. Hãy bổ sung họ tên và năm sinh.';
