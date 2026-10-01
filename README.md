@@ -1,6 +1,6 @@
 # Rootline · Family Tree Editor
 
-`family-tree-editor` là CMS offline và source of truth cho gia phả. Ứng dụng chạy hoàn toàn trong trình duyệt: không backend, database, API, đăng nhập, tracking hay upload ảnh.
+`family-tree-editor` là CMS offline-first và source of truth cho gia phả. Ứng dụng vẫn chỉnh sửa, validate, undo/redo và export được khi không có mạng; Worker/R2 chỉ được dùng cho thao tác đồng bộ Online tùy chọn.
 
 ## Chạy local
 
@@ -65,7 +65,7 @@ Trong form thêm/chỉnh sửa thành viên, **Thế hệ** là số nguyên dư
 
 Nút **Đẩy toàn bộ thế hệ** vẫn là thao tác nhanh để tăng `family.generationOffset` cho toàn bộ sơ đồ. Offset chỉ thay đổi cách hiển thị, được export/import và không thay đổi thế hệ cơ sở hay `rootPersonId`.
 
-Nút **Lưu lại** lưu bản JSON hiện tại vào bộ nhớ tạm của trình duyệt (`localStorage`), không tạo file tải xuống và không thay thế thao tác xuất `family.json` hoặc `data.enc`. Khi mở lại Editor, bản lưu tạm hợp lệ sẽ được khôi phục tự động.
+Nút **Lưu lại** lưu bản JSON hiện tại vào bộ nhớ tạm của trình duyệt (`localStorage`), không tạo file tải xuống và không thay thế thao tác xuất `family.json` hoặc `data.enc`. Khi mở lại Editor, dữ liệu Online mới nhất (hoặc `data.enc` local khi Worker không dùng được) được ưu tiên; bản lưu tạm chỉ được khôi phục khi người dùng chủ động bấm **Khôi phục bản local**.
 
 `data.enc` dùng cùng format với Viewer hiện tại: PBKDF2-SHA-256 với salt ngẫu nhiên, AES-256-GCM với IV ngẫu nhiên, cùng envelope `v: 1`. File export có trường `auth.username: "donghothe"` để tương thích với màn hình đăng nhập của Viewer. Mật khẩu nhập khi mã hóa `data.enc` chính là mật khẩu đăng nhập Viewer tương ứng; mật khẩu không bao giờ được lưu trong dữ liệu, localStorage, IndexedDB hay console.
 

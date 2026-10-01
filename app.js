@@ -249,7 +249,10 @@ function restoreStoredLocalWork() {
   past = [];
   future = [];
   dirty = true;
-  loadedDataSource = 'local-draft';
+  // This is an explicit user choice, but the draft has no trustworthy remote
+  // version baseline. Keep the publish guard active so it cannot silently
+  // overwrite a newer R2 dataset.
+  loadedDataSource = EDITOR_DATA_SOURCE.LOCAL_FALLBACK;
   preserveRecoveryOnce = false;
   setEditorState('editing');
   startEditorUi();
