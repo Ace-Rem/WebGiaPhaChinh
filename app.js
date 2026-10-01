@@ -2,7 +2,7 @@ import { buildFamilyGraph, getSiblingOrder, lifeDates, initials, normalizeText, 
 import { convertGoogleDriveLink } from './drive-link.js';
 import { getMemberImageFilename, getMemberImagePath } from './member-image.js';
 import { decryptData, encryptData } from './crypto.js';
-import { publishFamilyData } from './dataSource.js';
+import { decryptPreparedData, EDITOR_DATA_SOURCE, loadRemoteVersion, prepareLatestData, publishFamilyData } from './dataSource.js';
 import { validateFamily } from './validation.js';
 import { analyzeScript, formatScriptDiagnostics } from './script.js';
 
@@ -33,9 +33,10 @@ const sampleData = {
 };
 
 const els = {
-  brandName: $('#brandName'), saveStatus: $('#saveStatus'), memberSummary: $('#memberSummary'), memberSidebar: $('#memberSidebar'), clearMemberSearch: $('#clearMemberSearch'), memberList: $('#memberList'), memberSearch: $('#memberSearch'), listCount: $('#listCount'), sortMembers: $('#sortMembers'), validationBadge: $('#validationBadge'), validationSummary: $('#validationSummary'), validationDialog: $('#validationDialog'), validationContent: $('#validationContent'), driveLinkButton: $('#driveLinkButton'), driveLinkDialog: $('#driveLinkDialog'), driveLinkInput: $('#driveLinkInput'), driveLinkOutput: $('#driveLinkOutput'), driveLinkError: $('#driveLinkError'), copyDriveLinkButton: $('#copyDriveLinkButton'), copyDriveLinkLabel: $('#copyDriveLinkLabel'), scriptButton: $('#scriptButton'), clearMembersButton: $('#clearMembersButton'), scriptDialog: $('#scriptDialog'), scriptInput: $('#scriptInput'), scriptCheck: $('#scriptCheck'), scriptRun: $('#scriptRun'), scriptClear: $('#scriptClear'), scriptHelp: $('#scriptHelp'), scriptStatus: $('#scriptStatus'), scriptHelpDialog: $('#scriptHelpDialog'), detailSidebar: $('#detailSidebar'), familyTitle: $('#familyTitle'), familyDescription: $('#familyDescription'), editFamilyNameButton: $('#editFamilyNameButton'), treeContext: $('#treeContext'), pushGenerationButton: $('#pushGenerationButton'), clearSelection: $('#clearSelection'), treeViewport: $('#treeViewport'), treeSvg: $('#familyTree'), treeLoading: $('#treeLoading'), undoButton: $('#undoButton'), redoButton: $('#redoButton'), generationRail: $('#generationRail'), editorDialog: $('#editorDialog'), memberForm: $('#memberForm'), formKicker: $('#formKicker'), formTitle: $('#formTitle'), formError: $('#formError'), formImagePreview: $('#formImagePreview'), relationshipDialog: $('#relationshipDialog'), relationshipForm: $('#relationshipForm'), relationshipTitle: $('#relationshipTitle'), relationSearch: $('#relationSearch'), relationshipOptions: $('#relationshipOptions'), relationshipTarget: $('#relationshipTarget'), confirmRelationship: $('#confirmRelationship'), settingsDialog: $('#settingsDialog'), settingsForm: $('#settingsForm'), settingsKicker: $('#settingsKicker'), settingsTitle: $('#settingsTitle'), rootPersonSelect: $('#rootPersonSelect'), exportDialog: $('#exportDialog'), passwordDialog: $('#passwordDialog'), passwordForm: $('#passwordForm'), passwordError: $('#passwordError'), publishOnlineButton: $('#publishOnlineButton'), publishDialog: $('#publishDialog'), publishForm: $('#publishForm'), publishImages: $('#publishImages'), publishError: $('#publishError'), publishProgress: $('#publishProgress'), publishSubmitButton: $('#publishSubmitButton'), importFile: $('#importFile'), saveDraftButton: $('#saveDraftButton'), toast: $('#toast')
+  brandName: $('#brandName'), saveStatus: $('#saveStatus'), memberSummary: $('#memberSummary'), memberSidebar: $('#memberSidebar'), clearMemberSearch: $('#clearMemberSearch'), memberList: $('#memberList'), memberSearch: $('#memberSearch'), listCount: $('#listCount'), sortMembers: $('#sortMembers'), validationBadge: $('#validationBadge'), validationSummary: $('#validationSummary'), validationDialog: $('#validationDialog'), validationContent: $('#validationContent'), driveLinkButton: $('#driveLinkButton'), driveLinkDialog: $('#driveLinkDialog'), driveLinkInput: $('#driveLinkInput'), driveLinkOutput: $('#driveLinkOutput'), driveLinkError: $('#driveLinkError'), copyDriveLinkButton: $('#copyDriveLinkButton'), copyDriveLinkLabel: $('#copyDriveLinkLabel'), scriptButton: $('#scriptButton'), clearMembersButton: $('#clearMembersButton'), scriptDialog: $('#scriptDialog'), scriptInput: $('#scriptInput'), scriptCheck: $('#scriptCheck'), scriptRun: $('#scriptRun'), scriptClear: $('#scriptClear'), scriptHelp: $('#scriptHelp'), scriptStatus: $('#scriptStatus'), scriptHelpDialog: $('#scriptHelpDialog'), detailSidebar: $('#detailSidebar'), familyTitle: $('#familyTitle'), familyDescription: $('#familyDescription'), editFamilyNameButton: $('#editFamilyNameButton'), treeContext: $('#treeContext'), pushGenerationButton: $('#pushGenerationButton'), clearSelection: $('#clearSelection'), treeViewport: $('#treeViewport'), treeSvg: $('#familyTree'), treeLoading: $('#treeLoading'), undoButton: $('#undoButton'), redoButton: $('#redoButton'), generationRail: $('#generationRail'), editorDialog: $('#editorDialog'), memberForm: $('#memberForm'), formKicker: $('#formKicker'), formTitle: $('#formTitle'), formError: $('#formError'), formImagePreview: $('#formImagePreview'), relationshipDialog: $('#relationshipDialog'), relationshipForm: $('#relationshipForm'), relationshipTitle: $('#relationshipTitle'), relationSearch: $('#relationSearch'), relationshipOptions: $('#relationshipOptions'), relationshipTarget: $('#relationshipTarget'), confirmRelationship: $('#confirmRelationship'), settingsDialog: $('#settingsDialog'), settingsForm: $('#settingsForm'), settingsKicker: $('#settingsKicker'), settingsTitle: $('#settingsTitle'), rootPersonSelect: $('#rootPersonSelect'), exportDialog: $('#exportDialog'), passwordDialog: $('#passwordDialog'), passwordForm: $('#passwordForm'), passwordError: $('#passwordError'), publishOnlineButton: $('#publishOnlineButton'), publishDialog: $('#publishDialog'), publishForm: $('#publishForm'), publishImages: $('#publishImages'), publishError: $('#publishError'), publishProgress: $('#publishProgress'), publishSubmitButton: $('#publishSubmitButton'), initialSyncDialog: $('#initialSyncDialog'), initialSyncForm: $('#initialSyncForm'), initialSyncStatus: $('#initialSyncStatus'), initialSyncVersion: $('#initialSyncVersion'), initialSyncPassword: $('#initialSyncPassword'), initialSyncError: $('#initialSyncError'), initialSyncSubmitButton: $('#initialSyncSubmitButton'), initialDraftButton: $('#initialDraftButton'), initialSampleButton: $('#initialSampleButton'), importFile: $('#importFile'), saveDraftButton: $('#saveDraftButton'), toast: $('#toast')
 };
 let data = clone(sampleData); let driveCopyTimer; let graph; let renderer; let selectedPersonId = null; let profilePersonId = null; let activeGeneration = null; let editingId = null; let relationType = null; let relationSelectedIds = new Set(); let past = []; let future = []; let dirty = false; let toastTimer; let settingsNameOnly = false; let scriptSeedLoaded = false; let publishTokenSession = '';
+let editorState = 'initialLoading'; let pendingStartupData = null; let serverDataVersion = null; let loadedDataVersion = null; let loadedDataSource = null; let preserveRecoveryOnce = false; let startupLocalWork = null;
 
 function normaliseData(candidate) {
   const next = clone(candidate || {});
@@ -105,24 +106,25 @@ function romanNumeral(number) { const numerals = ['I', 'V', 'X', 'L', 'C', 'D', 
 function pushHistory() { past.push(clone(data)); if (past.length > 80) past.shift(); future = []; dirty = true; }
 function clearRecovery() { try { localStorage.removeItem(recoveryStorageKey); } catch {} }
 function saveRecoverySnapshot() { try { localStorage.setItem(recoveryStorageKey, JSON.stringify({ savedAt: new Date().toISOString(), data: getExportData() })); } catch {} }
-function markSaved(label = 'Đã lưu') { dirty = false; clearRecovery(); els.saveStatus.textContent = label; els.saveDraftButton.disabled = true; els.saveDraftButton.setAttribute('aria-disabled', 'true'); document.querySelector('.status-dot')?.classList.remove('is-dirty'); }
+function markSaved(label = 'Đã lưu') { dirty = false; if (preserveRecoveryOnce) preserveRecoveryOnce = false; else clearRecovery(); els.saveStatus.textContent = label; els.saveDraftButton.disabled = true; els.saveDraftButton.setAttribute('aria-disabled', 'true'); document.querySelector('.status-dot')?.classList.remove('is-dirty'); }
 function markDirty() { dirty = true; saveRecoverySnapshot(); els.saveDraftButton.disabled = false; els.saveDraftButton.setAttribute('aria-disabled', 'false'); els.saveStatus.textContent = 'Chưa lưu thay đổi'; document.querySelector('.status-dot')?.classList.add('is-dirty'); }
 function saveDraft() { try { localStorage.setItem(draftStorageKey, JSON.stringify(getExportData())); markSaved('Đã lưu tạm'); showToast('Đã lưu tạm trong trình duyệt. Chưa xuất file.'); } catch { showToast('Không thể lưu tạm dữ liệu trong trình duyệt này.'); } }
-function restoreDraft() { try { const raw = localStorage.getItem(draftStorageKey); if (!raw) return false; const candidate = normaliseData(JSON.parse(raw)); if (!candidate.members.length) return false; data = candidate; return true; } catch { localStorage.removeItem(draftStorageKey); return false; } }
-function restoreRecovery() {
+function hasStoredLocalWork() { try { return { draft: Boolean(localStorage.getItem(draftStorageKey)), recovery: Boolean(localStorage.getItem(recoveryStorageKey)) }; } catch { return { draft: false, recovery: false }; } }
+function readStoredLocalWork() {
   try {
-    const raw = localStorage.getItem(recoveryStorageKey);
-    if (!raw) return false;
-    const stored = JSON.parse(raw);
-    const candidate = normaliseData(stored.data || stored);
-    if (!candidate.members.length) { clearRecovery(); return false; }
-    const savedAt = stored.savedAt ? new Date(stored.savedAt).toLocaleString('vi-VN') : 'vừa được lưu';
-    const shouldRestore = confirm('Phát hiện bản recovery từ ' + savedAt + '. Bạn có muốn khôi phục dữ liệu chưa lưu không?');
-    if (!shouldRestore) { clearRecovery(); return false; }
-    data = candidate;
-    dirty = true;
-    return true;
-  } catch { clearRecovery(); return false; }
+    const recovery = localStorage.getItem(recoveryStorageKey);
+    if (recovery) {
+      const stored = JSON.parse(recovery);
+      const candidate = normaliseData(stored.data || stored);
+      if (candidate.members.length) return candidate;
+    }
+    const draft = localStorage.getItem(draftStorageKey);
+    if (draft) {
+      const candidate = normaliseData(JSON.parse(draft));
+      if (candidate.members.length) return candidate;
+    }
+  } catch { /* keep the server/local encrypted source authoritative */ }
+  return null;
 }
 function updateHistoryControls() { [els.undoButton, els.redoButton].forEach((button, index) => { if (!button) return; const enabled = index === 0 ? past.length > 0 : future.length > 0; button.disabled = !enabled; button.setAttribute('aria-disabled', String(!enabled)); }); }
 function commit(mutator, message) { pushHistory(); mutator(); refresh(); if (message) showToast(message); }
@@ -161,6 +163,125 @@ function selectPerson(id, { center = true } = {}) { if (!member(id)) return; sel
 function renderGenerationRail() { const track = $('.generation-rail-track', els.generationRail); track.innerHTML = Array.from({ length: graph.maxGeneration + 1 }, (_, generation) => `<button data-generation="${generation}" aria-label="Thế hệ ${generationOffset() + generation + 1}"><span>THẾ HỆ ${romanNumeral(generationOffset() + generation + 1)}</span></button>`).join(''); $$('button', track).forEach((button) => button.addEventListener('click', () => { activeGeneration = Number(button.dataset.generation); renderer?.focusGeneration(activeGeneration); updateRail(); })); updateRail(); }
 function updateRail() { if (!renderer) return; const metrics = renderer.getGenerationRailMetrics(); const track = $('.generation-rail-track', els.generationRail); track.style.height = `${metrics.trackHeight}px`; metrics.positions.forEach(({ generation, top, height }) => { const button = track.querySelector(`[data-generation="${generation}"]`); if (button) { button.style.top = `${top}px`; button.style.height = `${Math.max(46, Math.min(78, height + 24))}px`; button.classList.toggle('active', activeGeneration === generation); } }); }
 function renderValidation() { const result = currentValidation(); const state = result.errors.length ? 'error' : result.warnings.length ? 'warning' : 'ok'; els.validationBadge.textContent = state === 'error' ? '!' : state === 'warning' ? '!' : '✓'; els.validationBadge.className = state; els.validationSummary.textContent = result.errors.length ? `${result.errors.length} lỗi cần xử lý` : result.warnings.length ? `${result.warnings.length} cảnh báo` : 'Dữ liệu hợp lệ'; els.validationContent.innerHTML = `<div class="validation-overview ${state}"><strong>${state === 'error' ? 'Không thể xuất' : state === 'warning' ? 'Có cảnh báo cần xem lại' : 'Dữ liệu sẵn sàng'}</strong><span>${result.memberCount} thành viên · ${result.imageCount} filename ảnh hợp lệ</span></div><div class="validation-section"><h3>QUAN HỆ VÀ DỮ LIỆU</h3>${result.errors.length ? result.errors.map((message) => `<p class="validation-item error"><b>✕</b>${esc(message)}</p>`).join('') : '<p class="validation-item ok"><b>✓</b>Relationships và cấu trúc cơ bản hợp lệ.</p>'}${result.warnings.map((message) => `<p class="validation-item warning"><b>⚠</b>${esc(message)}</p>`).join('')}</div><div class="validation-section"><h3>IMAGE REFERENCES</h3><p class="validation-item ok"><b>✓</b>${result.imageCount} filename được tạo từ họ tên + năm sinh.</p></div>`; return result; }
+
+function setEditorState(state) {
+  editorState = state;
+  if (state === 'initialLoading') els.saveStatus.textContent = 'Đang kiểm tra dữ liệu Online…';
+  if (state === 'loaded') els.saveStatus.textContent = 'Đã tải dữ liệu';
+  if (state === 'editing') els.saveStatus.textContent = 'Đã tải dữ liệu';
+  if (state === 'publishing') els.saveStatus.textContent = 'Đang cập nhật Online…';
+  if (state === 'publishSuccess') els.saveStatus.textContent = 'Đã cập nhật online';
+  if (state === 'publishError') els.saveStatus.textContent = 'Online chưa cập nhật';
+}
+
+function normaliseAndValidateLoadedData(candidate) {
+  const normalised = normaliseData(candidate);
+  const validation = validateFamily(normalised);
+  if (validation.errors.length) throw new Error(validation.errors.join(' '));
+  return normalised;
+}
+
+function startEditorUi() {
+  renderer = new TreeRenderer(els.treeSvg, els.treeViewport, (id) => selectPerson(id), (id) => selectPerson(id), updateRail);
+  renderer.render(buildFamilyGraph(data));
+  refresh();
+  requestAnimationFrame(() => {
+    renderer.fit(false);
+    els.treeLoading.classList.add('is-done');
+    if (startupLocalWork?.draft || startupLocalWork?.recovery) showToast('Đã tải dữ liệu server. Bản local chưa lưu không tự động được áp dụng.');
+  });
+}
+
+function applyStartupData(candidate, prepared) {
+  data = normaliseData(candidate);
+  past = [];
+  future = [];
+  dirty = false;
+  loadedDataSource = prepared.source;
+  serverDataVersion = prepared.version?.versionId || null;
+  loadedDataVersion = serverDataVersion;
+  preserveRecoveryOnce = Boolean(startupLocalWork?.recovery);
+  setEditorState('loaded');
+  startEditorUi();
+  setEditorState('editing');
+  els.saveStatus.textContent = prepared.source === EDITOR_DATA_SOURCE.ONLINE ? `Đã tải online · ${loadedDataVersion}` : 'Dữ liệu local · chưa phải bản mới nhất';
+}
+
+function showStartupPasswordStep() {
+  const usingLocal = pendingStartupData.source === EDITOR_DATA_SOURCE.LOCAL_FALLBACK;
+  els.initialSyncStatus.textContent = usingLocal ? 'Không thể tải dữ liệu Online. Đang sử dụng dữ liệu local.' : 'Đã tải dữ liệu mới nhất. Nhập mật khẩu Viewer để mở Editor.';
+  els.initialSyncVersion.textContent = pendingStartupData.version?.versionId ? `Server version: ${pendingStartupData.version.versionId}` : 'Nguồn: data.enc local (fallback)';
+  els.initialSyncPassword.hidden = false;
+  els.initialSyncSubmitButton.hidden = false;
+  els.initialSyncPassword.querySelector('input')?.focus();
+}
+
+async function handleInitialSync(event) {
+  event.preventDefault();
+  const password = String(new FormData(els.initialSyncForm).get('password') || '');
+  if (!password) { els.initialSyncError.textContent = 'Hãy nhập mật khẩu Viewer để giải mã data.enc.'; return; }
+  setEditorState('initialLoading');
+  els.initialSyncError.textContent = '';
+  els.initialSyncStatus.textContent = 'Đang giải mã và kiểm tra dữ liệu…';
+  els.initialSyncSubmitButton.disabled = true;
+  try {
+    const candidate = await decryptPreparedData(pendingStartupData, password, normaliseAndValidateLoadedData);
+    applyStartupData(candidate, pendingStartupData);
+    els.initialSyncDialog.close();
+  } catch (error) {
+    setEditorState('initialError');
+    els.initialSyncError.textContent = error?.code === 'decrypt-failed' ? 'Mật khẩu Viewer không đúng hoặc data.enc không thể giải mã.' : error?.code === 'schema-invalid' ? 'Dữ liệu tải về không hợp lệ, Editor không thay đổi state.' : 'Không thể mở dữ liệu khởi động.';
+  } finally {
+    els.initialSyncSubmitButton.disabled = false;
+  }
+}
+
+function startWithSampleData() {
+  applyStartupData(clone(sampleData), { source: 'sample', version: null });
+  els.initialSyncDialog.close();
+  showToast('Đang dùng dữ liệu mẫu. Hãy nhập hoặc tải data.enc trước khi publish.');
+}
+
+function restoreStoredLocalWork() {
+  const candidate = readStoredLocalWork();
+  if (!candidate) { els.initialSyncError.textContent = 'Bản local không còn hợp lệ.'; return; }
+  data = candidate;
+  past = [];
+  future = [];
+  dirty = true;
+  loadedDataSource = 'local-draft';
+  preserveRecoveryOnce = false;
+  setEditorState('editing');
+  startEditorUi();
+  els.initialSyncDialog.close();
+  showToast('Đã khôi phục bản local chưa lưu. Dữ liệu server vẫn là version baseline để kiểm tra publish.');
+}
+
+async function loadStartupData() {
+  startupLocalWork = hasStoredLocalWork();
+  setEditorState('initialLoading');
+  els.initialSyncDialog.showModal();
+  els.initialSyncStatus.textContent = 'Đang kiểm tra dữ liệu Online…';
+  els.initialSyncVersion.textContent = '';
+  els.initialSyncPassword.hidden = true;
+  els.initialSyncSubmitButton.hidden = true;
+  els.initialDraftButton.hidden = !startupLocalWork?.draft && !startupLocalWork?.recovery;
+  els.initialSampleButton.hidden = true;
+  els.initialSyncError.textContent = '';
+  try {
+    pendingStartupData = await prepareLatestData();
+    showStartupPasswordStep();
+  } catch (error) {
+    setEditorState('initialError');
+    els.initialSyncStatus.textContent = 'Không thể tải dữ liệu Online hoặc data.enc local.';
+    els.initialSyncVersion.textContent = 'Bạn có thể bắt đầu bằng dữ liệu mẫu, hoặc kiểm tra lại kết nối/file data.enc.';
+    els.initialSyncError.textContent = 'Dữ liệu mẫu chỉ được dùng khi bạn chủ động chọn, không tự động ghi đè dữ liệu server.';
+    els.initialDraftButton.hidden = !startupLocalWork?.draft && !startupLocalWork?.recovery;
+    els.initialSampleButton.hidden = false;
+    console.error('Editor startup data unavailable:', error);
+  }
+}
+
 function refresh() { data = normaliseData(data); graph = buildFamilyGraph(data); els.brandName.textContent = data.family.name; els.familyTitle.textContent = data.family.name || 'Gốc rễ của chúng ta'; els.familyDescription.textContent = data.family.description || 'Mỗi cái tên là một sợi dây nối các thế hệ.'; els.memberSummary.textContent = `${graph.members.length} thành viên · ${graph.maxGeneration + 1} thế hệ`; if (els.clearMembersButton) { els.clearMembersButton.disabled = graph.members.length === 0; els.clearMembersButton.setAttribute('aria-disabled', String(graph.members.length === 0)); } renderer?.render(graph, selectedPersonId); renderMemberList(); renderGenerationRail(); refreshSelection(); renderDetail(profilePersonId); renderValidation(); updateHistoryControls(); if (dirty) markDirty(); else markSaved(); }
 function getExportData() { const output = clone(data); output.schemaVersion = 1; output.auth = { ...(data.auth || {}), username: viewerUsername }; return output; }
 function download(filename, content, type = 'application/json') { const blob = new Blob([content], { type }); const url = URL.createObjectURL(blob); const link = document.createElement('a'); link.href = url; link.download = filename; link.click(); setTimeout(() => URL.revokeObjectURL(url), 1000); }
@@ -179,12 +300,31 @@ function openPublishDialog() {
   setTimeout(() => els.publishForm.elements.publishToken.focus(), 40);
 }
 function publishErrorMessage(error) {
-  if (error?.status === 401 || error?.status === 403) return 'Publish Token không đúng hoặc không có quyền cập nhật.';
+  if (error?.code === 'worker-http' && (error.status === 401 || error.status === 403)) return 'Publish Token không đúng hoặc không có quyền cập nhật.';
+  if (error?.code === 'worker-http' && error.status === 409) return `Worker chưa sẵn sàng commit phiên bản này: ${error.message}.`;
+  if (error?.code === 'worker-http') return `Worker từ chối publish (HTTP ${error.status}). Dữ liệu local vẫn an toàn.`;
+  if (error?.code === 'remote-version-changed') return `Dữ liệu trên máy chủ đã đổi sang ${error.latestVersion}. Dữ liệu đang chỉnh sửa vẫn được giữ nguyên; hãy tải lại Editor trước khi publish.`;
+  if (error?.code === 'remote-version-check-failed') return 'Không thể kiểm tra version mới nhất trước khi publish. Dữ liệu local vẫn an toàn.';
+  if (error?.code === 'local-fallback-publish-cancelled') return 'Đã hủy publish để tránh ghi đè dữ liệu Online bằng bản local cũ.';
   if (error?.message === 'remote-not-configured' || error?.message === 'remote-disabled') return 'Chưa cấu hình Worker trong remote-config.js.';
   if (error?.message?.startsWith('image-name-invalid:')) return `Tên ảnh không đúng quy tắc: ${error.message.slice('image-name-invalid:'.length)}`;
   if (error?.message?.startsWith('image-too-large:')) return `Ảnh vượt quá kích thước cho phép: ${error.message.slice('image-too-large:'.length)}`;
-  if (error?.name === 'AbortError' || error?.message === 'Failed to fetch') return 'Không thể kết nối Worker. Dữ liệu local vẫn an toàn.';
-  return 'Không thể cập nhật online. Dữ liệu local vẫn an toàn.';
+  if (error?.code === 'publish-timeout') return 'Worker phản hồi quá thời gian. Dữ liệu local vẫn an toàn.';
+  if (error?.code === 'publish-network-or-cors') return 'Không thể kết nối Worker hoặc request bị CORS chặn. Dữ liệu local vẫn an toàn.';
+  if (error?.message === 'data-invalid' || error?.message === 'data-empty') return 'data.enc không hợp lệ nên chưa upload. Dữ liệu local vẫn an toàn.';
+  return `Không thể cập nhật online${error?.message ? `: ${error.message}` : ''}. Dữ liệu local vẫn an toàn.`;
+}
+async function ensureCurrentServerVersion() {
+  let latest;
+  try { latest = await loadRemoteVersion(); } catch (error) { throw Object.assign(new Error('remote-version-check-failed'), { code: 'remote-version-check-failed', cause: error }); }
+  serverDataVersion = latest.versionId;
+  if (loadedDataVersion && latest.versionId !== loadedDataVersion) {
+    throw Object.assign(new Error('remote-version-changed'), { code: 'remote-version-changed', latestVersion: latest.versionId, loadedVersion: loadedDataVersion });
+  }
+  if (!loadedDataVersion && loadedDataSource === EDITOR_DATA_SOURCE.LOCAL_FALLBACK && !confirm('Editor đang dùng data.enc local vì lần khởi động trước không tải được Worker. Publish có thể ghi đè dữ liệu Online hiện tại. Bạn có chắc muốn tiếp tục?')) {
+    throw Object.assign(new Error('local-fallback-publish-cancelled'), { code: 'local-fallback-publish-cancelled' });
+  }
+  return latest;
 }
 async function handlePublish(event) {
   event.preventDefault();
@@ -204,16 +344,22 @@ async function handlePublish(event) {
   els.publishSubmitButton.disabled = true;
   els.publishError.textContent = '';
   els.publishProgress.textContent = 'Đang validate và mã hóa data.enc…';
+  setEditorState('publishing');
   try {
+    await ensureCurrentServerVersion();
     const encryptedText = await encryptData(getExportData(), password);
     els.publishProgress.textContent = files.length ? `Đang upload dữ liệu và ${files.length} ảnh…` : 'Đang upload data.enc…';
     const result = await publishFamilyData({ encryptedText, token, imageFiles: files });
     if (form.get('rememberToken') === 'on') publishTokenSession = token;
+    serverDataVersion = result.version;
+    loadedDataVersion = result.version;
+    setEditorState('publishSuccess');
     els.publishProgress.textContent = `Đã cập nhật phiên bản ${result.version}.`;
     els.saveStatus.textContent = 'Đã cập nhật online · hãy export data.enc cho Git';
     els.publishDialog.close();
     showToast('Đã cập nhật Online. Bản local vẫn được giữ nguyên.');
   } catch (error) {
+    setEditorState('publishError');
     console.error('Online publish failed:', error);
     els.publishError.textContent = publishErrorMessage(error);
     els.publishProgress.textContent = '';
@@ -419,10 +565,10 @@ function saveSettings(event) { event.preventDefault(); if (event.submitter?.valu
 function undo() { if (!past.length) return; future.push(clone(data)); data = past.pop(); dirty = past.length > 0; refresh(); showToast('Đã hoàn tác.'); }
 function redo() { if (!future.length) return; past.push(clone(data)); data = future.pop(); dirty = true; refresh(); showToast('Đã làm lại.'); }
 function closeSidebar() { els.memberSidebar.classList.remove('is-open'); }
-function init() { const restoredDraft = restoreDraft(); const recoveredDraft = restoreRecovery(); renderer = new TreeRenderer(els.treeSvg, els.treeViewport, (id) => selectPerson(id), (id) => selectPerson(id), updateRail); renderer.render(buildFamilyGraph(data)); refresh(); requestAnimationFrame(() => { renderer.fit(false); els.treeLoading.classList.add('is-done'); if (recoveredDraft) showToast('Đã khôi phục bản recovery chưa lưu.'); else if (restoredDraft) showToast('Đã khôi phục bản lưu tạm.'); }); }
+function init() { loadStartupData(); }
 
 els.driveLinkButton?.addEventListener('click', openDriveLinkDialog); els.driveLinkInput?.addEventListener('input', updateDriveLinkConversion); els.copyDriveLinkButton?.addEventListener('click', copyDriveLink); $('#addMemberButton').addEventListener('click', () => openMemberEditor()); $('#memberSearch').addEventListener('input', renderMemberList); $('#clearMemberSearch').addEventListener('click', () => { els.memberSearch.value = ''; renderMemberList(); els.memberSearch.focus(); }); $('#sortMembers').addEventListener('change', renderMemberList); $('#validationLink').addEventListener('click', () => { renderValidation(); els.validationDialog.showModal(); }); $('#undoButton').addEventListener('click', undo); $('#redoButton').addEventListener('click', redo); els.saveDraftButton?.addEventListener('click', saveDraft); $('#importButton').addEventListener('click', () => els.importFile.click()); els.importFile.addEventListener('change', () => { const file = els.importFile.files[0]; if (file) importFile(file); els.importFile.value = ''; }); $('#exportButton').addEventListener('click', () => els.exportDialog.showModal()); $('#pushGenerationButton').addEventListener('click', pushAllGenerations); $('#settingsButton').addEventListener('click', openSettings); els.editFamilyNameButton.addEventListener('click', () => openSettings(true)); $('#openSidebar').addEventListener('click', () => els.memberSidebar.classList.add('is-open')); $('#closeSidebar').addEventListener('click', closeSidebar); $('#clearSelection').addEventListener('click', () => { selectedPersonId = null; profilePersonId = null; activeGeneration = null; renderer?.fit(); refreshSelection(); renderDetail(null); }); $('#zoomInButton').addEventListener('click', () => renderer?.zoomAt(1.18)); $('#zoomOutButton').addEventListener('click', () => renderer?.zoomAt(.84)); $('#fitButton').addEventListener('click', () => { activeGeneration = null; renderer?.fit(); updateRail(); }); els.scriptButton?.addEventListener('click', openScriptEditor); els.clearMembersButton?.addEventListener('click', clearAllMembers); els.scriptCheck?.addEventListener('click', checkScript); els.scriptRun?.addEventListener('click', runScript); els.scriptClear?.addEventListener('click', () => { els.scriptInput.value = ''; scriptSeedLoaded = true; renderScriptAnalysis({ ok: false, diagnostics: [], warnings: [], summary: null }); els.scriptStatus.className = 'script-status'; els.scriptStatus.innerHTML = '<strong>Script đã được xóa</strong><span>Nhập dữ liệu rồi bấm Kiểm tra.</span>'; els.scriptInput.focus(); }); els.scriptHelp?.addEventListener('click', () => els.scriptHelpDialog.showModal()); els.memberForm.addEventListener('submit', saveMember); els.memberForm.addEventListener('input', (event) => { formatDateInput(event); updateFormImage(); }); els.relationshipForm.addEventListener('submit', saveRelationship); els.relationSearch.addEventListener('input', renderRelationshipOptions); els.settingsForm.addEventListener('submit', saveSettings); els.passwordForm.addEventListener('submit', handlePassword); $$('[data-export="json"]').forEach((button) => button.addEventListener('click', exportJson)); $$('[data-export="enc"]').forEach((button) => button.addEventListener('click', exportEncrypted));
-els.publishOnlineButton?.addEventListener('click', openPublishDialog); els.publishForm?.addEventListener('submit', handlePublish);
+els.publishOnlineButton?.addEventListener('click', openPublishDialog); els.publishForm?.addEventListener('submit', handlePublish); els.initialSyncForm?.addEventListener('submit', handleInitialSync); els.initialDraftButton?.addEventListener('click', restoreStoredLocalWork); els.initialSampleButton?.addEventListener('click', startWithSampleData);
 const dialogGestureState = new WeakMap();
 document.querySelectorAll('dialog').forEach((dialog) => {
   dialog.addEventListener('pointerdown', (event) => {

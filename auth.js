@@ -1,4 +1,5 @@
 import { base64ToBytes, decryptData, decryptDataWithKey, deriveKeyFromPassword } from './crypto.js';
+import { prepareLatestData } from './dataSource.js';
 
 let encryptedPayload = null;
 let familyInMemory = null;
@@ -73,9 +74,7 @@ function validateDecryptedData(candidate) {
 
 export async function loadEncryptedPayload() {
   if (encryptedPayload) return encryptedPayload;
-  const response = await fetch('./data.enc', { cache: 'no-store' });
-  if (!response.ok) throw new Error('data-unavailable');
-  encryptedPayload = await response.text();
+  encryptedPayload = (await prepareLatestData()).payload;
   return encryptedPayload;
 }
 

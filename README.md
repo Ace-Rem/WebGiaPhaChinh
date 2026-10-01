@@ -124,10 +124,12 @@ Editor vẫn là offline-first. Cấu hình cùng Worker URL trong `remote-confi
 
 ```js
 enabled: true,
-apiBaseUrl: 'https://your-worker.workers.dev'
+apiBaseUrl: 'https://family-tree-api.acerem.workers.dev'
 ```
 
 Nút **☁ Cập nhật Online** kiểm tra validation trước, mã hóa bằng đúng PBKDF2-SHA-256 + AES-256-GCM hiện tại, rồi upload `data.enc` tới Worker. Publish token và mật khẩu Viewer chỉ được giữ trong memory của tab; checkbox ghi nhớ token chỉ có hiệu lực trong phiên hiện tại, không ghi localStorage. Lỗi mạng, Worker, CORS hoặc token không đúng không ảnh hưởng dữ liệu đang chỉnh sửa.
+
+Khi mở Editor, hộp **Đồng bộ dữ liệu** luôn gọi `GET /version` rồi `GET /data?version=...` với `cache: no-store` trước khi cho phép chỉnh sửa. Người dùng nhập đúng mật khẩu Viewer để giải mã trên máy. `loadedDataVersion` và `serverDataVersion` được giữ trong memory của phiên; khi server đổi version trong lúc Editor đang mở, lần publish kế tiếp bị chặn và dữ liệu đang chỉnh sửa không bị xóa. Draft/recovery trong localStorage chỉ được cảnh báo, không tự động ghi đè dữ liệu server mới.
 
 Có thể chọn thêm ảnh theo filename chuẩn hiện tại (`nguyenvanminh1990.webp`, `.jpg`, `.jpeg`, `.png`). Editor hash từng file và bỏ qua file không đổi. Ảnh và data được stage theo version; Worker chỉ đổi pointer `current.json` sau khi mọi object đã verify. Sau publish vẫn dùng **Xuất → data.enc** để tải bản local và copy vào `family-tree-viewer/data.enc` khi muốn cập nhật emergency fallback trong Git.
 

@@ -1,7 +1,7 @@
 // Public configuration only. Never put a publish token or Cloudflare credentials here.
 export const REMOTE_CONFIG = Object.freeze({
   enabled: true,
-  apiBaseUrl: 'https://YOUR-WORKER.workers.dev',
+  apiBaseUrl: 'https://family-tree-api.acerem.workers.dev',
   dataPath: '/data',
   versionPath: '/version',
   publishPath: '/publish',
