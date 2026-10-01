@@ -194,37 +194,52 @@ async function imageExistsWithHash(filename, contentHash, size) {
   }
 }
 
-export async function uploadImageIfChanged(file, token, version) {
-  if (!(file instanceof File)) throw new Error('image-invalid');
-  if (file.size > REMOTE_CONFIG.maxImageBytes) throw new Error(`image-too-large:${file.name}`);
-  const filename = file.name.trim().toLowerCase();
-  if (!/^[a-z0-9]+\d{4}\.(?:webp|jpg|jpeg|png)$/.test(filename)) throw new Error(`image-name-invalid:${file.name}`);
-  const contentHash = await sha256Hex(file);
-  if (await imageExistsWithHash(filename, contentHash, file.size)) return { filename, skipped: true };
+export async function uploadImageIfChanged(image, token, version) {
+  if (!image?.blob || !(image.blob instanceof Blob) || !image.filename) throw new Error('image-invalid');
+  if (image.blob.size > REMOTE_CONFIG.maxImageBytes) throw new Error(`image-too-large:${image.filename}`);
+  const filename = String(image.filename).trim().toLowerCase();
+  if (!/^[a-z0-9]+\d{4}\.webp$/.test(filename)) throw new Error(`image-name-invalid:${filename}`);
+  const contentHash = await sha256Hex(image.blob);
+  if (await imageExistsWithHash(filename, contentHash, image.blob.size)) return { filename, skipped: true };
   const response = await request(`${joinUrl(REMOTE_CONFIG.publishImagesPath)}/${encodeURIComponent(filename)}`, {
     method: 'PUT',
-    headers: authHeaders(token, { 'Content-Type': file.type || 'application/octet-stream', 'X-Publish-Version': version, 'X-Content-SHA256': contentHash }),
-    body: file,
+    headers: authHeaders(token, { 'Content-Type': 'image/webp', 'X-Publish-Version': version, 'X-Content-SHA256': contentHash }),
+    body: image.blob,
   }, `upload image ${filename}`);
   if (!response.ok) throw await responseError(response, `image-upload-failed:${filename}`);
   return { ...(await response.json()), filename, skipped: false };
 }
 
-export async function commitOnlinePublish({ token, version, contentHash, dataSize, images = [] }) {
+export async function commitOnlinePublish({ token, version, contentHash, dataSize, images = [], removedImages = [] }) {
   const response = await request(joinUrl(REMOTE_CONFIG.publishCommitPath), {
     method: 'POST',
     headers: authHeaders(token, { 'Content-Type': 'application/json' }),
-    body: JSON.stringify({ version, contentHash, dataSize, images }),
+    body: JSON.stringify({ version, contentHash, dataSize, images, removedImages }),
   }, 'commit');
   if (!response.ok) throw await responseError(response, 'publish-commit-failed');
   return response.json();
 }
 
-export async function publishFamilyData({ encryptedText, token, imageFiles = [] }) {
+async function runWithConcurrency(items, concurrency, worker, onProgress) {
+  const results = new Array(items.length);
+  let cursor = 0;
+  let completed = 0;
+  async function consume() {
+    while (cursor < items.length) {
+      const index = cursor++;
+      results[index] = await worker(items[index], index);
+      completed += 1;
+      onProgress?.(completed, items.length);
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(concurrency, items.length) }, consume));
+  return results;
+}
+
+export async function publishFamilyData({ encryptedText, token, imageChanges = [], removedImages = [], onImageProgress }) {
   const uploadedData = await publishEncryptedData(encryptedText, token);
   const version = uploadedData.version || uploadedData.contentHash;
-  const imageResults = [];
-  for (const file of imageFiles) imageResults.push(await uploadImageIfChanged(file, token, version));
-  const committed = await commitOnlinePublish({ token, version, contentHash: uploadedData.contentHash, dataSize: uploadedData.dataSize, images: imageResults.filter((item) => !item.skipped).map((item) => item.filename) });
+  const imageResults = await runWithConcurrency(imageChanges, 3, (image) => uploadImageIfChanged(image, token, version), onImageProgress);
+  const committed = await commitOnlinePublish({ token, version, contentHash: uploadedData.contentHash, dataSize: uploadedData.dataSize, images: imageResults.filter((item) => !item.skipped).map((item) => item.filename), removedImages });
   return { ...committed, version, contentHash: uploadedData.contentHash, images: imageResults };
 }

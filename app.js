@@ -1,10 +1,11 @@
 import { buildFamilyGraph, getSiblingOrder, lifeDates, initials, normalizeText, TreeRenderer } from './tree.js';
 import { convertGoogleDriveLink } from './drive-link.js';
-import { getMemberImageFilename, getMemberImagePath } from './member-image.js';
+import { clearMemberImagePreview, clearMemberImagePreviews, getMemberImageFilename, getMemberImagePath, setMemberImagePreview, setMemberImageSource } from './member-image.js';
 import { decryptData, encryptData } from './crypto.js';
 import { decryptPreparedData, EDITOR_DATA_SOURCE, loadRemoteVersion, prepareLatestData, publishFamilyData } from './dataSource.js';
 import { validateFamily } from './validation.js';
 import { analyzeScript, formatScriptDiagnostics } from './script.js';
+import { formatImageSize, prepareMemberImage } from './image-processing.js';
 
 const $ = (selector, parent = document) => parent.querySelector(selector);
 const $$ = (selector, parent = document) => [...parent.querySelectorAll(selector)];
@@ -33,10 +34,12 @@ const sampleData = {
 };
 
 const els = {
-  brandName: $('#brandName'), saveStatus: $('#saveStatus'), memberSummary: $('#memberSummary'), memberSidebar: $('#memberSidebar'), clearMemberSearch: $('#clearMemberSearch'), memberList: $('#memberList'), memberSearch: $('#memberSearch'), listCount: $('#listCount'), sortMembers: $('#sortMembers'), validationBadge: $('#validationBadge'), validationSummary: $('#validationSummary'), validationDialog: $('#validationDialog'), validationContent: $('#validationContent'), driveLinkButton: $('#driveLinkButton'), driveLinkDialog: $('#driveLinkDialog'), driveLinkInput: $('#driveLinkInput'), driveLinkOutput: $('#driveLinkOutput'), driveLinkError: $('#driveLinkError'), copyDriveLinkButton: $('#copyDriveLinkButton'), copyDriveLinkLabel: $('#copyDriveLinkLabel'), scriptButton: $('#scriptButton'), clearMembersButton: $('#clearMembersButton'), scriptDialog: $('#scriptDialog'), scriptInput: $('#scriptInput'), scriptCheck: $('#scriptCheck'), scriptRun: $('#scriptRun'), scriptClear: $('#scriptClear'), scriptHelp: $('#scriptHelp'), scriptStatus: $('#scriptStatus'), scriptHelpDialog: $('#scriptHelpDialog'), detailSidebar: $('#detailSidebar'), familyTitle: $('#familyTitle'), familyDescription: $('#familyDescription'), editFamilyNameButton: $('#editFamilyNameButton'), treeContext: $('#treeContext'), pushGenerationButton: $('#pushGenerationButton'), clearSelection: $('#clearSelection'), treeViewport: $('#treeViewport'), treeSvg: $('#familyTree'), treeLoading: $('#treeLoading'), undoButton: $('#undoButton'), redoButton: $('#redoButton'), generationRail: $('#generationRail'), editorDialog: $('#editorDialog'), memberForm: $('#memberForm'), formKicker: $('#formKicker'), formTitle: $('#formTitle'), formError: $('#formError'), formImagePreview: $('#formImagePreview'), relationshipDialog: $('#relationshipDialog'), relationshipForm: $('#relationshipForm'), relationshipTitle: $('#relationshipTitle'), relationSearch: $('#relationSearch'), relationshipOptions: $('#relationshipOptions'), relationshipTarget: $('#relationshipTarget'), confirmRelationship: $('#confirmRelationship'), settingsDialog: $('#settingsDialog'), settingsForm: $('#settingsForm'), settingsKicker: $('#settingsKicker'), settingsTitle: $('#settingsTitle'), rootPersonSelect: $('#rootPersonSelect'), exportDialog: $('#exportDialog'), passwordDialog: $('#passwordDialog'), passwordForm: $('#passwordForm'), passwordError: $('#passwordError'), publishOnlineButton: $('#publishOnlineButton'), publishDialog: $('#publishDialog'), publishForm: $('#publishForm'), publishImages: $('#publishImages'), publishError: $('#publishError'), publishProgress: $('#publishProgress'), publishSubmitButton: $('#publishSubmitButton'), initialSyncDialog: $('#initialSyncDialog'), initialSyncForm: $('#initialSyncForm'), initialSyncStatus: $('#initialSyncStatus'), initialSyncVersion: $('#initialSyncVersion'), initialSyncPassword: $('#initialSyncPassword'), initialSyncError: $('#initialSyncError'), initialSyncSubmitButton: $('#initialSyncSubmitButton'), initialDraftButton: $('#initialDraftButton'), initialSampleButton: $('#initialSampleButton'), importFile: $('#importFile'), saveDraftButton: $('#saveDraftButton'), toast: $('#toast')
+  brandName: $('#brandName'), saveStatus: $('#saveStatus'), memberSummary: $('#memberSummary'), memberSidebar: $('#memberSidebar'), clearMemberSearch: $('#clearMemberSearch'), memberList: $('#memberList'), memberSearch: $('#memberSearch'), listCount: $('#listCount'), sortMembers: $('#sortMembers'), validationBadge: $('#validationBadge'), validationSummary: $('#validationSummary'), validationDialog: $('#validationDialog'), validationContent: $('#validationContent'), driveLinkButton: $('#driveLinkButton'), driveLinkDialog: $('#driveLinkDialog'), driveLinkInput: $('#driveLinkInput'), driveLinkOutput: $('#driveLinkOutput'), driveLinkError: $('#driveLinkError'), copyDriveLinkButton: $('#copyDriveLinkButton'), copyDriveLinkLabel: $('#copyDriveLinkLabel'), scriptButton: $('#scriptButton'), clearMembersButton: $('#clearMembersButton'), scriptDialog: $('#scriptDialog'), scriptInput: $('#scriptInput'), scriptCheck: $('#scriptCheck'), scriptRun: $('#scriptRun'), scriptClear: $('#scriptClear'), scriptHelp: $('#scriptHelp'), scriptStatus: $('#scriptStatus'), scriptHelpDialog: $('#scriptHelpDialog'), detailSidebar: $('#detailSidebar'), familyTitle: $('#familyTitle'), familyDescription: $('#familyDescription'), editFamilyNameButton: $('#editFamilyNameButton'), treeContext: $('#treeContext'), pushGenerationButton: $('#pushGenerationButton'), clearSelection: $('#clearSelection'), treeViewport: $('#treeViewport'), treeSvg: $('#familyTree'), treeLoading: $('#treeLoading'), undoButton: $('#undoButton'), redoButton: $('#redoButton'), generationRail: $('#generationRail'), editorDialog: $('#editorDialog'), memberForm: $('#memberForm'), formKicker: $('#formKicker'), formTitle: $('#formTitle'), formError: $('#formError'), formImagePreview: $('#formImagePreview'), relationshipDialog: $('#relationshipDialog'), relationshipForm: $('#relationshipForm'), relationshipTitle: $('#relationshipTitle'), relationSearch: $('#relationSearch'), relationshipOptions: $('#relationshipOptions'), relationshipTarget: $('#relationshipTarget'), confirmRelationship: $('#confirmRelationship'), settingsDialog: $('#settingsDialog'), settingsForm: $('#settingsForm'), settingsKicker: $('#settingsKicker'), settingsTitle: $('#settingsTitle'), rootPersonSelect: $('#rootPersonSelect'), exportDialog: $('#exportDialog'), passwordDialog: $('#passwordDialog'), passwordForm: $('#passwordForm'), passwordError: $('#passwordError'), publishOnlineButton: $('#publishOnlineButton'), publishDialog: $('#publishDialog'), publishForm: $('#publishForm'), publishError: $('#publishError'), publishProgress: $('#publishProgress'), publishSubmitButton: $('#publishSubmitButton'), initialSyncDialog: $('#initialSyncDialog'), initialSyncForm: $('#initialSyncForm'), initialSyncStatus: $('#initialSyncStatus'), initialSyncVersion: $('#initialSyncVersion'), initialSyncPassword: $('#initialSyncPassword'), initialSyncError: $('#initialSyncError'), initialSyncSubmitButton: $('#initialSyncSubmitButton'), initialDraftButton: $('#initialDraftButton'), initialSampleButton: $('#initialSampleButton'), importFile: $('#importFile'), memberImageInput: $('#memberImageInput'), saveDraftButton: $('#saveDraftButton'), toast: $('#toast')
 };
 let data = clone(sampleData); let driveCopyTimer; let graph; let renderer; let selectedPersonId = null; let profilePersonId = null; let activeGeneration = null; let editingId = null; let relationType = null; let relationSelectedIds = new Set(); let past = []; let future = []; let dirty = false; let toastTimer; let settingsNameOnly = false; let scriptSeedLoaded = false; let publishTokenSession = '';
-let editorState = 'initialLoading'; let pendingStartupData = null; let serverDataVersion = null; let loadedDataVersion = null; let loadedDataSource = null; let preserveRecoveryOnce = false; let startupLocalWork = null;
+let editorState = 'initialLoading'; let pendingStartupData = null; let serverDataVersion = null; let loadedDataVersion = null; let loadedDataSource = null; let preserveRecoveryOnce = false; let startupLocalWork = null; let imageTargetMemberId = null;
+const pendingImageChanges = new Map();
+const pendingImageDeletes = new Set();
 
 function normaliseData(candidate) {
   const next = clone(candidate || {});
@@ -103,7 +106,31 @@ function sexLabel(value) { return value === 'male' ? 'Nam' : value === 'female' 
 function generationOffset() { return Number.isInteger(data?.family?.generationOffset) && data.family.generationOffset >= 0 ? data.family.generationOffset : 0; }
 function displayGeneration(id) { return (graph?.generations.get(id) || 0) + generationOffset() + 1; }
 function romanNumeral(number) { const numerals = ['I', 'V', 'X', 'L', 'C', 'D', 'M']; if (number <= 0) return String(number); if (number > 6) return String(number); return number === 1 ? numerals[0] : number === 2 ? 'II' : number === 3 ? 'III' : number === 4 ? 'IV' : number === 5 ? 'V' : 'VI'; }
-function pushHistory() { past.push(clone(data)); if (past.length > 80) past.shift(); future = []; dirty = true; }
+function captureImageState() {
+  return {
+    changes: [...pendingImageChanges.entries()].map(([memberId, item]) => ({ memberId, blob: item.blob, width: item.width, height: item.height, size: item.size })),
+    deletes: [...pendingImageDeletes],
+  };
+}
+function releasePendingImageUrls() {
+  pendingImageChanges.forEach((item) => { if (item.previewUrl) URL.revokeObjectURL(item.previewUrl); });
+}
+function restoreImageState(snapshot = {}) {
+  releasePendingImageUrls();
+  pendingImageChanges.clear();
+  pendingImageDeletes.clear();
+  clearMemberImagePreviews();
+  (snapshot.changes || []).forEach((item) => {
+    if (!item?.memberId || !(item.blob instanceof Blob)) return;
+    const previewUrl = URL.createObjectURL(item.blob);
+    pendingImageChanges.set(item.memberId, { ...item, previewUrl });
+    setMemberImagePreview(item.memberId, previewUrl);
+  });
+  (snapshot.deletes || []).forEach((memberId) => { pendingImageDeletes.add(memberId); setMemberImagePreview(memberId, null); });
+}
+function captureEditorState() { return { data: clone(data), images: captureImageState() }; }
+function restoreEditorState(snapshot) { data = clone(snapshot.data); restoreImageState(snapshot.images); }
+function pushHistory() { past.push(captureEditorState()); if (past.length > 80) past.shift(); future = []; dirty = true; }
 function clearRecovery() { try { localStorage.removeItem(recoveryStorageKey); } catch {} }
 function saveRecoverySnapshot() { try { localStorage.setItem(recoveryStorageKey, JSON.stringify({ savedAt: new Date().toISOString(), data: getExportData() })); } catch {} }
 function markSaved(label = 'Đã lưu') { dirty = false; if (preserveRecoveryOnce) preserveRecoveryOnce = false; else clearRecovery(); els.saveStatus.textContent = label; els.saveDraftButton.disabled = true; els.saveDraftButton.setAttribute('aria-disabled', 'true'); document.querySelector('.status-dot')?.classList.remove('is-dirty'); }
@@ -132,10 +159,103 @@ function currentValidation() { return validateFamily(data); }
 function pushAllGenerations() { if (!confirm('Đẩy toàn bộ thế hệ?\n\nThế hệ hiện tại sẽ được dịch lên 1 bậc. Quan hệ cha, mẹ và vợ/chồng không thay đổi.')) return; commit(() => { data.family.generationOffset = generationOffset() + 1; }, `Đã đẩy toàn bộ thế hệ lên ${generationOffset() + 1}.`); }
 
 function avatar(memberData, className = 'avatar') {
-  const filename = getMemberImageFilename(memberData); const path = getMemberImagePath(memberData);
-  return `<span class="${className}" data-photo-frame><span class="avatar-fallback">${esc(initials(memberData.fullName))}</span>${path ? `<img src="${esc(path)}" alt="" data-member-photo loading="lazy" />` : ''}</span>`;
+  const path = getMemberImagePath(memberData);
+  return `<span class="${className}" data-photo-frame data-member-id="${esc(memberData.id || '')}"><span class="avatar-fallback">${esc(initials(memberData.fullName))}</span>${path ? `<img src="${esc(path)}" alt="" data-member-photo loading="lazy" />` : ''}</span>`;
 }
 function wirePhotos(root = document) { root.querySelectorAll('[data-member-photo]').forEach((image) => { image.addEventListener('load', () => image.closest('[data-photo-frame]')?.classList.add('has-photo'), { once: true }); image.addEventListener('error', () => image.remove(), { once: true }); }); }
+function imageStatus(memberData) {
+  const filename = getMemberImageFilename(memberData);
+  const pending = pendingImageChanges.get(memberData.id);
+  if (pending) return { filename, text: `Ảnh chưa đồng bộ · WebP • ${formatImageSize(pending.size)}`, action: 'remove' };
+  if (pendingImageDeletes.has(memberData.id)) return { filename, text: 'Ảnh sẽ xóa khi cập nhật Online', action: 'restore' };
+  return { filename, text: filename ? 'Ảnh thành viên' : 'Thêm năm sinh để xác định filename', action: filename ? 'remove' : null };
+}
+function profileImageBlock(memberData) {
+  const state = imageStatus(memberData);
+  const removeLabel = state.action === 'restore' ? 'Khôi phục ảnh' : 'Xóa ảnh';
+  return `<div class="member-photo-panel"><div class="member-photo-frame">${avatar(memberData, 'detail-avatar')}</div><div class="member-photo-copy"><span class="eyebrow">ẢNH THÀNH VIÊN</span><strong>${esc(state.filename || 'Chưa xác định')}</strong><small>${esc(state.text)}</small><div class="member-photo-actions"><button class="button button-quiet" type="button" id="editMemberImage">✎ Sửa ảnh</button>${state.action ? `<button class="text-button member-remove-image" type="button" id="removeMemberImage">${removeLabel}</button>` : ''}</div></div></div>`;
+}
+function openMemberImagePicker(memberId) {
+  imageTargetMemberId = memberId;
+  els.memberImageInput.value = '';
+  els.memberImageInput.click();
+}
+function replacePendingImage(memberId, prepared) {
+  const previous = pendingImageChanges.get(memberId);
+  if (previous?.previewUrl) URL.revokeObjectURL(previous.previewUrl);
+  const previewUrl = URL.createObjectURL(prepared.blob);
+  pendingImageChanges.set(memberId, { ...prepared, previewUrl });
+  pendingImageDeletes.delete(memberId);
+  setMemberImagePreview(memberId, previewUrl);
+}
+async function handleMemberImageSelection() {
+  const file = els.memberImageInput.files?.[0];
+  const memberData = member(imageTargetMemberId);
+  if (!file || !memberData) return;
+  if (!getMemberImageFilename(memberData)) { showToast('Cần có họ tên và năm sinh để xác định filename ảnh.'); return; }
+  try {
+    const prepared = await prepareMemberImage(file);
+    pushHistory();
+    replacePendingImage(memberData.id, prepared);
+    refresh();
+    showToast(`Đã chuẩn bị ảnh WebP cho ${memberData.fullName}. Chưa upload lên Online.`);
+  } catch (error) {
+    const messages = { 'image-type-invalid': 'Chỉ hỗ trợ PNG, JPG, JPEG hoặc WebP.', 'image-source-too-large': 'Ảnh gốc vượt quá giới hạn 50 MB.', 'image-decode-failed': 'Không thể đọc ảnh.', 'webp-encode-failed': 'Trình duyệt không thể tạo ảnh WebP.', 'image-output-too-large': 'Ảnh sau tối ưu vẫn vượt quá giới hạn cho phép.' };
+    showToast(messages[error?.message] || 'Không thể xử lý ảnh.');
+  } finally {
+    els.memberImageInput.value = '';
+  }
+}
+function removeMemberImage(memberId) {
+  const memberData = member(memberId); if (!memberData) return;
+  const isRestore = pendingImageDeletes.has(memberId);
+  if (!isRestore && !confirm(`Xóa ảnh của ${memberData.fullName}? Ảnh chỉ bị xóa khi Cập nhật Online thành công.`)) return;
+  pushHistory();
+  const previous = pendingImageChanges.get(memberId);
+  if (previous?.previewUrl) URL.revokeObjectURL(previous.previewUrl);
+  pendingImageChanges.delete(memberId);
+  if (isRestore) {
+    pendingImageDeletes.delete(memberId);
+    clearMemberImagePreview(memberId);
+  } else {
+    pendingImageDeletes.add(memberId);
+    setMemberImagePreview(memberId, null);
+  }
+  refresh();
+  showToast(isRestore ? 'Đã khôi phục trạng thái ảnh.' : 'Đã đánh dấu xóa ảnh. Chưa xóa trên Online.');
+}
+function clearPendingImages() {
+  releasePendingImageUrls();
+  pendingImageChanges.clear();
+  pendingImageDeletes.clear();
+  clearMemberImagePreviews();
+}
+function discardPendingImage(memberId) {
+  const pending = pendingImageChanges.get(memberId);
+  if (pending?.previewUrl) URL.revokeObjectURL(pending.previewUrl);
+  pendingImageChanges.delete(memberId);
+  pendingImageDeletes.delete(memberId);
+  clearMemberImagePreview(memberId);
+}
+function collectPendingImages() {
+  const imageChanges = [];
+  const removedImages = [];
+  const filenames = new Set();
+  for (const [memberId, image] of pendingImageChanges) {
+    const item = member(memberId);
+    const filename = item && getMemberImageFilename(item);
+    if (!filename) throw new Error(`image-name-invalid:${item?.fullName || memberId}`);
+    if (filenames.has(filename)) throw new Error(`image-name-collision:${filename}`);
+    filenames.add(filename);
+    imageChanges.push({ filename, blob: image.blob });
+  }
+  for (const memberId of pendingImageDeletes) {
+    const item = member(memberId);
+    const filename = item && getMemberImageFilename(item);
+    if (filename && !filenames.has(filename)) removedImages.push(filename);
+  }
+  return { imageChanges, removedImages };
+}
 function orderedMembers() {
   const query = normalizeText(els.memberSearch.value); let members = graph.members.filter((item) => !query || normalizeText(`${item.fullName} ${item.occupation || ''}`).includes(query));
   const sort = els.sortMembers.value;
@@ -150,11 +270,22 @@ function renderMemberList() {
 function relationButton(id, label, removeKind = '') { const item = member(id); return item ? `<div class="relative-wrap"><button class="relative-row" data-relative-id="${esc(id)}"><span>${avatar(item, 'relation-avatar')}</span><span><strong>${esc(item.fullName)}</strong><small>${esc(label)} · ${esc(lifeDates(item))}</small></span>${icon('arrow')}</button>${removeKind ? `<button class="relation-remove" data-remove-kind="${removeKind}" data-remove-id="${esc(id)}" aria-label="Gỡ quan hệ">×</button>` : ''}</div>` : ''; }
 function detailRelationBlock(label, ids, sublabel, removeKind = '') { const available = ids.filter((id) => member(id)); return available.length ? `<section class="detail-block"><h3>${label}</h3>${available.map((id) => relationButton(id, sublabel, removeKind)).join('')}</section>` : ''; }
 function renderDetail(id = profilePersonId) {
-  const item = member(id); if (!item) { els.detailSidebar.innerHTML = '<div class="empty-detail"><div class="empty-detail-mark">✦</div><span class="eyebrow">HỒ SƠ THÀNH VIÊN</span><h2>Chọn một người<br />trên cây gia phả</h2><p>Nhấn đúp để xem hồ sơ · dùng nút Chỉnh sửa để chỉnh sửa</p></div>'; return; }
-  profilePersonId = id; const parents = [item.fatherId, item.motherId].filter(Boolean); const children = graph.childrenByParent.get(id) || []; const spouseIds = (item.spouseIds || []).filter((spouseId) => member(spouseId)); const siblingIds = [...(graph.siblingsByMember?.get(id) || [])].filter((siblingId) => member(siblingId)); const filename = getMemberImageFilename(item);
-  els.detailSidebar.innerHTML = `<div class="detail-head"><span class="eyebrow">HỒ SƠ THÀNH VIÊN</span><button class="icon-button" id="closeDetail" aria-label="Đóng hồ sơ"><svg><use href="#i-close"/></svg></button></div><div class="detail-hero">${avatar(item, 'detail-avatar')}<div><h2>${esc(item.fullName || 'Chưa đặt tên')}</h2><p>${esc(lifeDates(item))} · ${esc(sexLabel(item.gender))}</p></div></div><div class="detail-actions"><button class="button button-primary" id="editDetail">Chỉnh sửa</button><button class="button button-danger" id="deleteDetail">${icon('trash')}<span>Xóa</span></button></div><div class="facts-grid"><div><small>Ngày sinh</small><strong>${esc(formatDateForInput(item.birthDate) || 'Chưa cập nhật')}</strong></div><div><small>Ngày mất</small><strong>${esc(formatDateForInput(item.deathDate) || '—')}</strong></div><div><small>Thế hệ</small><strong>${displayGeneration(id)}</strong></div><div><small>Nơi sinh</small><strong>${esc(item.birthPlace || 'Chưa cập nhật')}</strong></div><div><small>Nghề nghiệp</small><strong>${esc(item.occupation || 'Chưa cập nhật')}</strong></div><div><small>Thứ tự con</small><strong>${getSiblingOrder(item) ?? 'Chưa cập nhật'}</strong></div></div>${filename ? `<div class="image-reference"><div><small>ẢNH THÀNH VIÊN</small><strong>${esc(filename)}</strong><code>assets/members/${esc(filename)}</code></div><button class="copy-button" id="copyImageName" title="Copy filename"><svg><use href="#i-copy"/></svg></button></div>` : '<div class="image-reference warning"><div><small>ẢNH THÀNH VIÊN</small><strong>Chưa thể xác định tên ảnh</strong><code>Thêm năm sinh để tạo filename</code></div></div>'}${detailRelationBlock('Cha mẹ', parents, 'Cha / mẹ', 'parent')}${detailRelationBlock('Vợ / chồng', spouseIds, 'Vợ / chồng', 'spouse')}${siblingIds.length ? `<section class="detail-block"><h3>Anh / chị / em ruột</h3>${siblingIds.map((siblingId) => relationButton(siblingId, 'Anh / chị / em ruột', (item.siblingIds || []).includes(siblingId) ? 'sibling' : '')).join('')}</section>` : ''}<section class="detail-block"><div class="block-heading"><h3>Con cái</h3><button class="mini-add" data-relation="child">＋ Thêm</button></div>${children.length ? children.map((childId) => relationButton(childId, 'Con cái', 'child')).join('') : '<p class="muted">Chưa có con được kết nối.</p>'}</section><section class="detail-block"><div class="block-heading"><h3>Kết nối</h3></div><div class="relation-tools"><button data-relation="father">＋ Thêm cha</button><button data-relation="mother">＋ Thêm mẹ</button><button data-relation="spouse">＋ Vợ / chồng</button><button data-relation="sibling">＋ Anh / chị / em</button></div></section>${item.note ? `<section class="detail-block"><h3>Ghi chú</h3><p class="detail-note">${esc(item.note)}</p></section>` : ''}`;
-  wirePhotos(els.detailSidebar); $('#closeDetail')?.addEventListener('click', () => { profilePersonId = null; selectedPersonId = null; refreshSelection(); renderDetail(null); }); $('#editDetail')?.addEventListener('click', () => openMemberEditor(id)); $('#deleteDetail')?.addEventListener('click', () => deleteMember(id)); $('#copyImageName')?.addEventListener('click', () => navigator.clipboard?.writeText(filename).then(() => showToast('Đã copy tên file ảnh.')));
-  $$('.relative-row', els.detailSidebar).forEach((button) => button.addEventListener('click', () => selectPerson(button.dataset.relativeId))); $$('.relation-remove', els.detailSidebar).forEach((button) => button.addEventListener('click', (event) => { event.stopPropagation(); removeRelation(button.dataset.removeKind, button.dataset.removeId); }));
+  const item = member(id);
+  if (!item) { els.detailSidebar.innerHTML = '<div class="empty-detail"><div class="empty-detail-mark">✦</div><span class="eyebrow">HỒ SƠ THÀNH VIÊN</span><h2>Chọn một người<br />trên cây gia phả</h2><p>Nhấn đúp để xem hồ sơ · dùng nút Chỉnh sửa để chỉnh sửa</p></div>'; return; }
+  profilePersonId = id;
+  const parents = [item.fatherId, item.motherId].filter(Boolean);
+  const children = graph.childrenByParent.get(id) || [];
+  const spouseIds = (item.spouseIds || []).filter((spouseId) => member(spouseId));
+  const siblingIds = [...(graph.siblingsByMember?.get(id) || [])].filter((siblingId) => member(siblingId));
+  els.detailSidebar.innerHTML = `<div class="detail-head"><span class="eyebrow">HỒ SƠ THÀNH VIÊN</span><button class="icon-button" id="closeDetail" aria-label="Đóng hồ sơ"><svg><use href="#i-close"/></svg></button></div>${profileImageBlock(item)}<div class="detail-identity"><h2>${esc(item.fullName || 'Chưa đặt tên')}</h2><p>${esc(lifeDates(item))} · ${esc(sexLabel(item.gender))}</p></div><div class="detail-actions"><button class="button button-primary" id="editDetail">Chỉnh sửa</button><button class="button button-danger" id="deleteDetail">${icon('trash')}<span>Xóa</span></button></div><div class="facts-grid"><div><small>Ngày sinh</small><strong>${esc(formatDateForInput(item.birthDate) || 'Chưa cập nhật')}</strong></div><div><small>Ngày mất</small><strong>${esc(formatDateForInput(item.deathDate) || '—')}</strong></div><div><small>Thế hệ</small><strong>${displayGeneration(id)}</strong></div><div><small>Nơi sinh</small><strong>${esc(item.birthPlace || 'Chưa cập nhật')}</strong></div><div><small>Nghề nghiệp</small><strong>${esc(item.occupation || 'Chưa cập nhật')}</strong></div><div><small>Thứ tự con</small><strong>${getSiblingOrder(item) ?? 'Chưa cập nhật'}</strong></div></div>${detailRelationBlock('Cha mẹ', parents, 'Cha / mẹ', 'parent')}${detailRelationBlock('Vợ / chồng', spouseIds, 'Vợ / chồng', 'spouse')}${siblingIds.length ? `<section class="detail-block"><h3>Anh / chị / em ruột</h3>${siblingIds.map((siblingId) => relationButton(siblingId, 'Anh / chị / em ruột', (item.siblingIds || []).includes(siblingId) ? 'sibling' : '')).join('')}</section>` : ''}<section class="detail-block"><div class="block-heading"><h3>Con cái</h3><button class="mini-add" data-relation="child">＋ Thêm</button></div>${children.length ? children.map((childId) => relationButton(childId, 'Con cái', 'child')).join('') : '<p class="muted">Chưa có con được kết nối.</p>'}</section><section class="detail-block"><div class="block-heading"><h3>Kết nối</h3></div><div class="relation-tools"><button data-relation="father">＋ Thêm cha</button><button data-relation="mother">＋ Thêm mẹ</button><button data-relation="spouse">＋ Vợ / chồng</button><button data-relation="sibling">＋ Anh / chị / em</button></div></section>${item.note ? `<section class="detail-block"><h3>Ghi chú</h3><p class="detail-note">${esc(item.note)}</p></section>` : ''}`;
+  wirePhotos(els.detailSidebar);
+  $('#closeDetail')?.addEventListener('click', () => { profilePersonId = null; selectedPersonId = null; refreshSelection(); renderDetail(null); });
+  $('#editDetail')?.addEventListener('click', () => openMemberEditor(id));
+  $('#deleteDetail')?.addEventListener('click', () => deleteMember(id));
+  $('#editMemberImage')?.addEventListener('click', () => openMemberImagePicker(id));
+  $('#removeMemberImage')?.addEventListener('click', () => removeMemberImage(id));
+  $$('.relative-row', els.detailSidebar).forEach((button) => button.addEventListener('click', () => selectPerson(button.dataset.relativeId)));
+  $$('.relation-remove', els.detailSidebar).forEach((button) => button.addEventListener('click', (event) => { event.stopPropagation(); removeRelation(button.dataset.removeKind, button.dataset.removeId); }));
   $$('.mini-add, .relation-tools button', els.detailSidebar).forEach((button) => button.addEventListener('click', () => openRelationship(button.dataset.relation)));
 }
 function refreshSelection() { renderer?.updateFocus(selectedPersonId, null); $$('.member-row').forEach((row) => row.classList.toggle('selected', row.dataset.memberId === selectedPersonId)); els.clearSelection.hidden = !selectedPersonId; els.treeContext.textContent = selectedPersonId ? `Đang xem ${member(selectedPersonId)?.fullName || 'thành viên'}` : 'Toàn bộ gia phả'; }
@@ -194,12 +325,14 @@ function startEditorUi() {
 
 function applyStartupData(candidate, prepared) {
   data = normaliseData(candidate);
+  restoreImageState();
   past = [];
   future = [];
   dirty = false;
   loadedDataSource = prepared.source;
   serverDataVersion = prepared.version?.versionId || null;
   loadedDataVersion = serverDataVersion;
+  setMemberImageSource(prepared.source === EDITOR_DATA_SOURCE.ONLINE ? 'online' : 'local-fallback', loadedDataVersion);
   preserveRecoveryOnce = Boolean(startupLocalWork?.recovery);
   setEditorState('loaded');
   startEditorUi();
@@ -246,6 +379,7 @@ function restoreStoredLocalWork() {
   const candidate = readStoredLocalWork();
   if (!candidate) { els.initialSyncError.textContent = 'Bản local không còn hợp lệ.'; return; }
   data = candidate;
+  restoreImageState();
   past = [];
   future = [];
   dirty = true;
@@ -311,6 +445,7 @@ function publishErrorMessage(error) {
   if (error?.code === 'local-fallback-publish-cancelled') return 'Đã hủy publish để tránh ghi đè dữ liệu Online bằng bản local cũ.';
   if (error?.message === 'remote-not-configured' || error?.message === 'remote-disabled') return 'Chưa cấu hình Worker trong remote-config.js.';
   if (error?.message?.startsWith('image-name-invalid:')) return `Tên ảnh không đúng quy tắc: ${error.message.slice('image-name-invalid:'.length)}`;
+  if (error?.message?.startsWith('image-name-collision:')) return `Trùng filename ảnh: ${error.message.slice('image-name-collision:'.length)}`;
   if (error?.message?.startsWith('image-too-large:')) return `Ảnh vượt quá kích thước cho phép: ${error.message.slice('image-too-large:'.length)}`;
   if (error?.code === 'publish-timeout') return 'Worker phản hồi quá thời gian. Dữ liệu local vẫn an toàn.';
   if (error?.code === 'publish-network-or-cors') return 'Không thể kết nối Worker hoặc request bị CORS chặn. Dữ liệu local vẫn an toàn.';
@@ -337,13 +472,13 @@ async function handlePublish(event) {
   const form = new FormData(els.publishForm);
   const token = String(form.get('publishToken') || '').trim();
   const password = String(form.get('password') || '');
-  const confirmPassword = String(form.get('confirmPassword') || '');
   if (!token) { els.publishError.textContent = 'Hãy nhập Publish Token.'; return; }
-  if (password.length < 8 || password !== confirmPassword) { els.publishError.textContent = password.length < 8 ? 'Mật khẩu cần ít nhất 8 ký tự.' : 'Mật khẩu nhập lại chưa khớp.'; return; }
-  const files = [...(els.publishImages.files || [])];
-  const knownNames = new Set(data.members.map((item) => getMemberImageFilename(item)).filter(Boolean));
-  const unknownFiles = files.filter((file) => !knownNames.has(file.name.toLowerCase()));
-  if (unknownFiles.length) { els.publishError.textContent = `Ảnh không khớp filename thành viên: ${unknownFiles.map((file) => file.name).join(', ')}`; return; }
+  if (password.length < 8) { els.publishError.textContent = 'Mật khẩu cần ít nhất 8 ký tự.'; return; }
+  let pendingImages;
+  try { pendingImages = collectPendingImages(); } catch (error) {
+    els.publishError.textContent = error?.message?.startsWith('image-name-collision:') ? `Trùng filename ảnh: ${error.message.slice('image-name-collision:'.length)}` : 'Không thể xác định filename ảnh. Hãy bổ sung họ tên và năm sinh.';
+    return;
+  }
   els.publishSubmitButton.disabled = true;
   els.publishError.textContent = '';
   els.publishProgress.textContent = 'Đang validate và mã hóa data.enc…';
@@ -351,11 +486,16 @@ async function handlePublish(event) {
   try {
     await ensureCurrentServerVersion();
     const encryptedText = await encryptData(getExportData(), password);
-    els.publishProgress.textContent = files.length ? `Đang upload dữ liệu và ${files.length} ảnh…` : 'Đang upload data.enc…';
-    const result = await publishFamilyData({ encryptedText, token, imageFiles: files });
+    const imageCount = pendingImages.imageChanges.length;
+    els.publishProgress.textContent = imageCount ? `Đang upload data.enc và ${imageCount} ảnh…` : 'Đang upload data.enc…';
+    const result = await publishFamilyData({ encryptedText, token, imageChanges: pendingImages.imageChanges, removedImages: pendingImages.removedImages, onImageProgress: (completed, total) => { els.publishProgress.textContent = `Đã upload ${completed}/${total} ảnh…`; } });
     if (form.get('rememberToken') === 'on') publishTokenSession = token;
     serverDataVersion = result.version;
     loadedDataVersion = result.version;
+    setMemberImageSource('online', result.version);
+    clearPendingImages();
+    refresh();
+    markSaved('Đã cập nhật online');
     setEditorState('publishSuccess');
     els.publishProgress.textContent = `Đã cập nhật phiên bản ${result.version}.`;
     els.saveStatus.textContent = 'Đã cập nhật online · hãy export data.enc cho Git';
@@ -370,7 +510,7 @@ async function handlePublish(event) {
     els.publishSubmitButton.disabled = false;
   }
 }
-async function importFile(file) { const text = await file.text(); let imported; if (file.name.toLowerCase().endsWith('.enc')) { const password = prompt('Nhập mật khẩu để mở data.enc:'); if (!password) return; try { imported = await decryptData(text, password); } catch { showToast('Mật khẩu sai hoặc file data.enc không hợp lệ.'); return; } } else { try { imported = JSON.parse(text); } catch { showToast('File JSON không hợp lệ.'); return; } } const candidate = normaliseData(imported); const result = validateFamily(candidate); data = candidate; localStorage.removeItem(draftStorageKey); clearRecovery(); selectedPersonId = null; profilePersonId = null; past = []; future = []; dirty = false; refresh(); if (result.errors.length) { els.validationDialog.showModal(); showToast(`Đã nhập dữ liệu với ${result.errors.length} lỗi cần xử lý.`); } else showToast(`Đã nhập ${candidate.members.length} thành viên.`); }
+async function importFile(file) { const text = await file.text(); let imported; if (file.name.toLowerCase().endsWith('.enc')) { const password = prompt('Nhập mật khẩu để mở data.enc:'); if (!password) return; try { imported = await decryptData(text, password); } catch { showToast('Mật khẩu sai hoặc file data.enc không hợp lệ.'); return; } } else { try { imported = JSON.parse(text); } catch { showToast('File JSON không hợp lệ.'); return; } } const candidate = normaliseData(imported); const result = validateFamily(candidate); clearPendingImages(); data = candidate; localStorage.removeItem(draftStorageKey); clearRecovery(); selectedPersonId = null; profilePersonId = null; past = []; future = []; dirty = false; refresh(); if (result.errors.length) { els.validationDialog.showModal(); showToast(`Đã nhập dữ liệu với ${result.errors.length} lỗi cần xử lý.`); } else showToast(`Đã nhập ${candidate.members.length} thành viên.`); }
 const starterScript = `# Ví dụ tối thiểu
 p A "Nguyễn Văn A" {
   g: m
@@ -465,7 +605,9 @@ function clearAllMembers() {
   if (!count) { showToast('Không có thành viên để xóa.'); return; }
   if (!confirm(`Xóa toàn bộ ${count} thành viên?\n\nMọi quan hệ và root person sẽ bị xóa. Thao tác này có thể hoàn tác bằng Undo.`)) return;
   commit(() => {
+    const memberIds = data.members.map((item) => item.id);
     data.members = [];
+    memberIds.forEach((memberId) => discardPendingImage(memberId));
     data.family.rootPersonId = null;
     selectedPersonId = null;
     profilePersonId = null;
@@ -473,7 +615,7 @@ function clearAllMembers() {
   }, `Đã xóa toàn bộ ${count} thành viên.`);
 }
 
-function deleteMember(id) { const item = member(id); if (!item) return; const relations = [item.fatherId && `cha: ${member(item.fatherId)?.fullName}`, item.motherId && `mẹ: ${member(item.motherId)?.fullName}`, ...(item.spouseIds || []).map((sid) => `vợ/chồng: ${member(sid)?.fullName}`), ...(graph.childrenByParent.get(id) || []).map((cid) => `con: ${member(cid)?.fullName}`)].filter(Boolean); const detail = relations.length ? `\n\nQuan hệ sẽ được gỡ:\n${relations.join('\n')}` : ''; if (!confirm(`Xóa ${item.fullName}?${detail}\n\nThao tác này có thể hoàn tác.`)) return; commit(() => { data.members = data.members.filter((candidate) => candidate.id !== id); data.members.forEach((candidate) => { if (candidate.fatherId === id) candidate.fatherId = null; if (candidate.motherId === id) candidate.motherId = null; candidate.spouseIds = (candidate.spouseIds || []).filter((sid) => sid !== id); }); if (data.family.rootPersonId === id) data.family.rootPersonId = null; }, 'Đã xóa thành viên.'); selectedPersonId = null; profilePersonId = null; }
+function deleteMember(id) { const item = member(id); if (!item) return; const relations = [item.fatherId && `cha: ${member(item.fatherId)?.fullName}`, item.motherId && `mẹ: ${member(item.motherId)?.fullName}`, ...(item.spouseIds || []).map((sid) => `vợ/chồng: ${member(sid)?.fullName}`), ...(graph.childrenByParent.get(id) || []).map((cid) => `con: ${member(cid)?.fullName}`)].filter(Boolean); const detail = relations.length ? `\n\nQuan hệ sẽ được gỡ:\n${relations.join('\n')}` : ''; if (!confirm(`Xóa ${item.fullName}?${detail}\n\nThao tác này có thể hoàn tác.`)) return; commit(() => { data.members = data.members.filter((candidate) => candidate.id !== id); discardPendingImage(id); data.members.forEach((candidate) => { if (candidate.fatherId === id) candidate.fatherId = null; if (candidate.motherId === id) candidate.motherId = null; candidate.spouseIds = (candidate.spouseIds || []).filter((sid) => sid !== id); }); if (data.family.rootPersonId === id) data.family.rootPersonId = null; }, 'Đã xóa thành viên.'); selectedPersonId = null; profilePersonId = null; }
 function relationGenerationDelta(type) {
   if (type === 'father' || type === 'mother') return -1;
   if (type === 'child') return 1;
@@ -565,12 +707,12 @@ function saveRelationship(event) {
 }
 function openSettings(nameOnly = false) { settingsNameOnly = nameOnly; const form = els.settingsForm; form.elements.familyName.value = data.family.name; form.elements.description.value = data.family.description; els.rootPersonSelect.innerHTML = '<option value="">Chưa chọn</option>' + graph.members.map((item) => '<option value="' + esc(item.id) + '">' + esc(item.fullName) + '</option>').join(''); els.rootPersonSelect.value = data.family.rootPersonId || ''; els.settingsKicker.textContent = nameOnly ? 'ĐỔI TÊN GIA PHẢ' : 'THIẾT LẬP'; els.settingsTitle.textContent = nameOnly ? 'Chỉnh sửa tên gia phả' : 'Thông tin gia đình'; els.settingsDialog.showModal(); setTimeout(() => form.elements.familyName.focus(), 40); }
 function saveSettings(event) { event.preventDefault(); if (event.submitter?.value === 'cancel') { els.settingsDialog.close(); settingsNameOnly = false; return; } const form = new FormData(els.settingsForm); commit(() => { data.family.name = String(form.get('familyName') || '').trim() || 'Gia phả gia đình'; data.family.description = String(form.get('description') || '').trim(); data.family.rootPersonId = form.get('rootPersonId') || null; }, settingsNameOnly ? 'Đã cập nhật tên gia phả.' : 'Đã cập nhật thiết lập.'); els.settingsDialog.close(); settingsNameOnly = false; }
-function undo() { if (!past.length) return; future.push(clone(data)); data = past.pop(); dirty = past.length > 0; refresh(); showToast('Đã hoàn tác.'); }
-function redo() { if (!future.length) return; past.push(clone(data)); data = future.pop(); dirty = true; refresh(); showToast('Đã làm lại.'); }
+function undo() { if (!past.length) return; future.push(captureEditorState()); restoreEditorState(past.pop()); dirty = past.length > 0 || pendingImageChanges.size > 0 || pendingImageDeletes.size > 0; refresh(); showToast('Đã hoàn tác.'); }
+function redo() { if (!future.length) return; past.push(captureEditorState()); restoreEditorState(future.pop()); dirty = true; refresh(); showToast('Đã làm lại.'); }
 function closeSidebar() { els.memberSidebar.classList.remove('is-open'); }
 function init() { loadStartupData(); }
 
-els.driveLinkButton?.addEventListener('click', openDriveLinkDialog); els.driveLinkInput?.addEventListener('input', updateDriveLinkConversion); els.copyDriveLinkButton?.addEventListener('click', copyDriveLink); $('#addMemberButton').addEventListener('click', () => openMemberEditor()); $('#memberSearch').addEventListener('input', renderMemberList); $('#clearMemberSearch').addEventListener('click', () => { els.memberSearch.value = ''; renderMemberList(); els.memberSearch.focus(); }); $('#sortMembers').addEventListener('change', renderMemberList); $('#validationLink').addEventListener('click', () => { renderValidation(); els.validationDialog.showModal(); }); $('#undoButton').addEventListener('click', undo); $('#redoButton').addEventListener('click', redo); els.saveDraftButton?.addEventListener('click', saveDraft); $('#importButton').addEventListener('click', () => els.importFile.click()); els.importFile.addEventListener('change', () => { const file = els.importFile.files[0]; if (file) importFile(file); els.importFile.value = ''; }); $('#exportButton').addEventListener('click', () => els.exportDialog.showModal()); $('#pushGenerationButton').addEventListener('click', pushAllGenerations); $('#settingsButton').addEventListener('click', openSettings); els.editFamilyNameButton.addEventListener('click', () => openSettings(true)); $('#openSidebar').addEventListener('click', () => els.memberSidebar.classList.add('is-open')); $('#closeSidebar').addEventListener('click', closeSidebar); $('#clearSelection').addEventListener('click', () => { selectedPersonId = null; profilePersonId = null; activeGeneration = null; renderer?.fit(); refreshSelection(); renderDetail(null); }); $('#zoomInButton').addEventListener('click', () => renderer?.zoomAt(1.18)); $('#zoomOutButton').addEventListener('click', () => renderer?.zoomAt(.84)); $('#fitButton').addEventListener('click', () => { activeGeneration = null; renderer?.fit(); updateRail(); }); els.scriptButton?.addEventListener('click', openScriptEditor); els.clearMembersButton?.addEventListener('click', clearAllMembers); els.scriptCheck?.addEventListener('click', checkScript); els.scriptRun?.addEventListener('click', runScript); els.scriptClear?.addEventListener('click', () => { els.scriptInput.value = ''; scriptSeedLoaded = true; renderScriptAnalysis({ ok: false, diagnostics: [], warnings: [], summary: null }); els.scriptStatus.className = 'script-status'; els.scriptStatus.innerHTML = '<strong>Script đã được xóa</strong><span>Nhập dữ liệu rồi bấm Kiểm tra.</span>'; els.scriptInput.focus(); }); els.scriptHelp?.addEventListener('click', () => els.scriptHelpDialog.showModal()); els.memberForm.addEventListener('submit', saveMember); els.memberForm.addEventListener('input', (event) => { formatDateInput(event); updateFormImage(); }); els.relationshipForm.addEventListener('submit', saveRelationship); els.relationSearch.addEventListener('input', renderRelationshipOptions); els.settingsForm.addEventListener('submit', saveSettings); els.passwordForm.addEventListener('submit', handlePassword); $$('[data-export="json"]').forEach((button) => button.addEventListener('click', exportJson)); $$('[data-export="enc"]').forEach((button) => button.addEventListener('click', exportEncrypted));
+els.driveLinkButton?.addEventListener('click', openDriveLinkDialog); els.driveLinkInput?.addEventListener('input', updateDriveLinkConversion); els.copyDriveLinkButton?.addEventListener('click', copyDriveLink); $('#addMemberButton').addEventListener('click', () => openMemberEditor()); $('#memberSearch').addEventListener('input', renderMemberList); $('#clearMemberSearch').addEventListener('click', () => { els.memberSearch.value = ''; renderMemberList(); els.memberSearch.focus(); }); $('#sortMembers').addEventListener('change', renderMemberList); $('#validationLink').addEventListener('click', () => { renderValidation(); els.validationDialog.showModal(); }); $('#undoButton').addEventListener('click', undo); $('#redoButton').addEventListener('click', redo); els.saveDraftButton?.addEventListener('click', saveDraft); $('#importButton').addEventListener('click', () => els.importFile.click()); els.importFile.addEventListener('change', () => { const file = els.importFile.files[0]; if (file) importFile(file); els.importFile.value = ''; }); els.memberImageInput?.addEventListener('change', handleMemberImageSelection); $('#exportButton').addEventListener('click', () => els.exportDialog.showModal()); $('#pushGenerationButton').addEventListener('click', pushAllGenerations); $('#settingsButton').addEventListener('click', openSettings); els.editFamilyNameButton.addEventListener('click', () => openSettings(true)); $('#openSidebar').addEventListener('click', () => els.memberSidebar.classList.add('is-open')); $('#closeSidebar').addEventListener('click', closeSidebar); $('#clearSelection').addEventListener('click', () => { selectedPersonId = null; profilePersonId = null; activeGeneration = null; renderer?.fit(); refreshSelection(); renderDetail(null); }); $('#zoomInButton').addEventListener('click', () => renderer?.zoomAt(1.18)); $('#zoomOutButton').addEventListener('click', () => renderer?.zoomAt(.84)); $('#fitButton').addEventListener('click', () => { activeGeneration = null; renderer?.fit(); updateRail(); }); els.scriptButton?.addEventListener('click', openScriptEditor); els.clearMembersButton?.addEventListener('click', clearAllMembers); els.scriptCheck?.addEventListener('click', checkScript); els.scriptRun?.addEventListener('click', runScript); els.scriptClear?.addEventListener('click', () => { els.scriptInput.value = ''; scriptSeedLoaded = true; renderScriptAnalysis({ ok: false, diagnostics: [], warnings: [], summary: null }); els.scriptStatus.className = 'script-status'; els.scriptStatus.innerHTML = '<strong>Script đã được xóa</strong><span>Nhập dữ liệu rồi bấm Kiểm tra.</span>'; els.scriptInput.focus(); }); els.scriptHelp?.addEventListener('click', () => els.scriptHelpDialog.showModal()); els.memberForm.addEventListener('submit', saveMember); els.memberForm.addEventListener('input', (event) => { formatDateInput(event); updateFormImage(); }); els.relationshipForm.addEventListener('submit', saveRelationship); els.relationSearch.addEventListener('input', renderRelationshipOptions); els.settingsForm.addEventListener('submit', saveSettings); els.passwordForm.addEventListener('submit', handlePassword); $$('[data-export="json"]').forEach((button) => button.addEventListener('click', exportJson)); $$('[data-export="enc"]').forEach((button) => button.addEventListener('click', exportEncrypted));
 els.publishOnlineButton?.addEventListener('click', openPublishDialog); els.publishForm?.addEventListener('submit', handlePublish); els.initialSyncForm?.addEventListener('submit', handleInitialSync); els.initialDraftButton?.addEventListener('click', restoreStoredLocalWork); els.initialSampleButton?.addEventListener('click', startWithSampleData);
 const dialogGestureState = new WeakMap();
 document.querySelectorAll('dialog').forEach((dialog) => {

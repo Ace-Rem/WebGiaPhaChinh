@@ -18,7 +18,7 @@ Mở <http://localhost:8080/>. Không cần npm, build step hay internet để c
 2. Nhập `family.json` hoặc `data.enc` cũ nếu có.
 3. Chỉnh sửa thành viên, quan hệ, root person và metadata gia đình.
 4. Mở **Kiểm tra dữ liệu** và xử lý toàn bộ lỗi nghiêm trọng.
-5. Chuẩn bị ảnh trong `family-tree-viewer/assets/members/`.
+5. Mở hồ sơ từng thành viên và bấm **Sửa ảnh**; Editor tự tối ưu ảnh thành WebP và chỉ giữ thay đổi trong phiên làm việc.
 6. Xuất `data.enc`, nhập mật khẩu hai lần.
 7. Copy file `data.enc` sang thư mục gốc của `family-tree-viewer`.
 8. Kiểm tra Viewer rồi commit/push thay đổi.
@@ -73,11 +73,7 @@ JSON plaintext chỉ dùng làm backup an toàn, không đưa lên repository pu
 
 ## Ảnh thành viên
 
-Editor không lưu binary ảnh, base64, Blob hay ArrayBuffer và không có file picker upload. Ảnh được chuẩn bị thủ công tại:
-
-```text
-family-tree-viewer/assets/members/
-```
+Editor không đưa binary ảnh, base64, Blob hay ArrayBuffer vào dữ liệu gia phả. Ảnh được chọn tại **Hồ sơ thành viên → Sửa ảnh**, xử lý trong memory và chỉ upload khi bấm **☁ Cập nhật Online**.
 
 Filename duy nhất được tạo bởi `getMemberImageFilename(member)`:
 
@@ -90,7 +86,7 @@ Tên được Unicode normalize, bỏ dấu tiếng Việt, chuyển lowercase, 
 
 Quan hệ **anh/chị/em ruột** được lưu bằng `siblingIds` đối xứng; cả Editor và Viewer đều tự nhận diện anh/chị/em dùng chung cha hoặc mẹ, vẽ kết nối riêng trên sơ đồ và hiển thị trong hồ sơ thành viên.
 
-Ảnh trong `assets/members/` là static asset public của GitHub Pages. Ảnh không được mã hóa cùng `data.enc`, vì vậy không đặt ảnh cần riêng tư tuyệt đối vào thư mục đó.
+Ảnh online được Worker phục vụ từ R2 qua `GET /images/<filename>`. Khi Worker không dùng được, Editor/Viewer vẫn hiển thị initials hoặc static asset local nếu có. Ảnh không được mã hóa cùng `data.enc`, không lưu trong localStorage và không đặt ảnh cần riêng tư tuyệt đối vào public storage.
 
 ## Validation
 
@@ -131,7 +127,9 @@ Nút **☁ Cập nhật Online** kiểm tra validation trước, mã hóa bằng
 
 Khi mở Editor, hộp **Đồng bộ dữ liệu** luôn gọi `GET /version` rồi `GET /data?version=...` với `cache: no-store` trước khi cho phép chỉnh sửa. Người dùng nhập đúng mật khẩu Viewer để giải mã trên máy. `loadedDataVersion` và `serverDataVersion` được giữ trong memory của phiên; khi server đổi version trong lúc Editor đang mở, lần publish kế tiếp bị chặn và dữ liệu đang chỉnh sửa không bị xóa. Draft/recovery trong localStorage chỉ được cảnh báo, không tự động ghi đè dữ liệu server mới.
 
-Có thể chọn thêm ảnh theo filename chuẩn hiện tại (`nguyenvanminh1990.webp`, `.jpg`, `.jpeg`, `.png`). Editor hash từng file và bỏ qua file không đổi. Ảnh và data được stage theo version; Worker chỉ đổi pointer `current.json` sau khi mọi object đã verify. Sau publish vẫn dùng **Xuất → data.enc** để tải bản local và copy vào `family-tree-viewer/data.enc` khi muốn cập nhật emergency fallback trong Git.
+Ảnh được chọn ở hồ sơ sẽ được decode local, giữ orientation, resize tối đa `800×800px`, không upscale, encode WebP quality `0.82` và giữ transparency. Preview dùng Blob/Object URL trong memory; không dùng base64. Filename vẫn tự tính từ họ tên không dấu + năm sinh, ví dụ `nguyenminhkhoi1984.webp`.
+
+Nhiều ảnh được upload qua Worker với concurrency tối đa `3`, hash trên Blob WebP cuối cùng để bỏ qua ảnh không đổi. Ảnh và data được stage theo version; Worker chỉ đổi pointer `current.json` sau khi mọi object đã verify. Ảnh bị xóa được đánh dấu trong commit và không còn được public qua `/images`; thao tác xóa không diễn ra ngay khi bấm nút. Sau publish vẫn dùng **Xuất → data.enc** để tải bản local và copy vào `family-tree-viewer/data.enc` khi muốn cập nhật emergency fallback trong Git.
 
 ## Offline fallback
 
