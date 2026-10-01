@@ -117,3 +117,33 @@ Không commit JSON gia phả plaintext, backup chưa mã hóa, mật khẩu, ghi
 
 
 `generation` là thế hệ cơ sở 1-based tùy chọn; nếu bỏ trống, graph suy ra từ cha/mẹ. Trong Editor, checkbox **Đẩy thế hệ sau** sẽ tăng 1 cho các member từ chính thế hệ đang nhập trở đi và được lưu trong Undo/Redo. `generationOffset` chỉ là offset hiển thị toàn cục.
+
+## Cloudflare configuration
+
+Editor vẫn là offline-first. Cấu hình cùng Worker URL trong `remote-config.js`; file này chỉ chứa URL public, không chứa token:
+
+```js
+enabled: true,
+apiBaseUrl: 'https://your-worker.workers.dev'
+```
+
+Nút **☁ Cập nhật Online** kiểm tra validation trước, mã hóa bằng đúng PBKDF2-SHA-256 + AES-256-GCM hiện tại, rồi upload `data.enc` tới Worker. Publish token và mật khẩu Viewer chỉ được giữ trong memory của tab; checkbox ghi nhớ token chỉ có hiệu lực trong phiên hiện tại, không ghi localStorage. Lỗi mạng, Worker, CORS hoặc token không đúng không ảnh hưởng dữ liệu đang chỉnh sửa.
+
+Có thể chọn thêm ảnh theo filename chuẩn hiện tại (`nguyenvanminh1990.webp`, `.jpg`, `.jpeg`, `.png`). Editor hash từng file và bỏ qua file không đổi. Ảnh và data được stage theo version; Worker chỉ đổi pointer `current.json` sau khi mọi object đã verify. Sau publish vẫn dùng **Xuất → data.enc** để tải bản local và copy vào `family-tree-viewer/data.enc` khi muốn cập nhật emergency fallback trong Git.
+
+## Offline fallback
+
+Không cần Internet cho thêm/sửa/xóa member, quan hệ, undo/redo, tree, search, validation hoặc export. Tắt network rồi thử chỉnh sửa và xuất `data.enc`; các chức năng đó vẫn hoạt động. Chỉ nút **Cập nhật Online** cần Worker.
+
+## Worker / R2 setup
+
+1. Tạo Cloudflare account và R2 bucket, ví dụ `family-tree-data`.
+2. Từ `family-tree-api/`, cài Wrangler rồi chạy `npx wrangler login`.
+3. Sửa `wrangler.toml`: `bucket_name` và `ALLOWED_ORIGINS` cho GitHub Pages Viewer, Editor và localhost.
+4. Bind binding `FAMILY_TREE_BUCKET` như file mẫu và deploy: `npm install`, `npm run deploy`.
+5. Tạo secret, không commit giá trị: `npx wrangler secret put PUBLISH_TOKEN`.
+6. Điền Worker URL vào cả `family-tree-viewer/remote-config.js` và `family-tree-editor/remote-config.js`.
+7. Mở Editor, validate dữ liệu, bấm **☁ Cập nhật Online**, nhập Publish Token và mật khẩu Viewer để publish lần đầu.
+8. Test Viewer khi Worker down, trả 404, trả envelope sai và khi tắt network; Viewer phải dùng `data.enc` local.
+
+API details và CORS policy nằm trong `family-tree-api/README.md`.

@@ -77,3 +77,8 @@ html,body{max-width:100%;overflow-x:clip}.topbar{height:68px;padding:0 24px;gap:
 .drive-link-error{min-height:16px;margin:7px 0 0}
 @media(max-width:820px){.drive-link-header-button{display:inline-flex;width:40px;padding:0}.drive-link-header-button span{display:none}}
 @media(max-width:520px){.drive-link-result-row{display:grid}.drive-link-result-row .button{width:100%}.drive-link-dialog .dialog-actions .button{width:100%}}
+
+/* Cloud publish stays optional; local editing and export do not depend on it. */
+.online-publish-button{border-color:rgba(146,178,153,.4);color:var(--sage)}.online-publish-button svg{color:var(--sage)}.online-publish-button:hover,.online-publish-button:focus-visible{border-color:rgba(146,178,153,.75);background:rgba(146,178,153,.12);color:var(--cream);outline:0}.publish-intro{margin:0 0 18px}.publish-file-hint{display:block;margin-top:6px;color:var(--muted-2);font-size:9px;line-height:1.45}.publish-session-check{margin-top:13px}.publish-progress{min-height:16px;margin-top:12px;color:var(--sage);font-size:10px;line-height:1.45}.publish-submit-button svg{width:15px;height:15px}.publish-submit-button:disabled{opacity:.55;cursor:wait}
+@media(max-width:1120px){.online-publish-button{display:inline-flex}}
+@media(max-width:820px){.online-publish-button{display:inline-flex;width:35px;padding:0}.online-publish-button span{display:none}.online-publish-button svg{width:16px;height:16px}}

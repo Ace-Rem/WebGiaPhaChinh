@@ -2,6 +2,7 @@ import { buildFamilyGraph, getSiblingOrder, lifeDates, initials, normalizeText, 
 import { convertGoogleDriveLink } from './drive-link.js';
 import { getMemberImageFilename, getMemberImagePath } from './member-image.js';
 import { decryptData, encryptData } from './crypto.js';
+import { publishFamilyData } from './dataSource.js';
 import { validateFamily } from './validation.js';
 import { analyzeScript, formatScriptDiagnostics } from './script.js';
 
@@ -32,9 +33,9 @@ const sampleData = {
 };
 
 const els = {
-  brandName: $('#brandName'), saveStatus: $('#saveStatus'), memberSummary: $('#memberSummary'), memberSidebar: $('#memberSidebar'), clearMemberSearch: $('#clearMemberSearch'), memberList: $('#memberList'), memberSearch: $('#memberSearch'), listCount: $('#listCount'), sortMembers: $('#sortMembers'), validationBadge: $('#validationBadge'), validationSummary: $('#validationSummary'), validationDialog: $('#validationDialog'), validationContent: $('#validationContent'), driveLinkButton: $('#driveLinkButton'), driveLinkDialog: $('#driveLinkDialog'), driveLinkInput: $('#driveLinkInput'), driveLinkOutput: $('#driveLinkOutput'), driveLinkError: $('#driveLinkError'), copyDriveLinkButton: $('#copyDriveLinkButton'), copyDriveLinkLabel: $('#copyDriveLinkLabel'), scriptButton: $('#scriptButton'), clearMembersButton: $('#clearMembersButton'), scriptDialog: $('#scriptDialog'), scriptInput: $('#scriptInput'), scriptCheck: $('#scriptCheck'), scriptRun: $('#scriptRun'), scriptClear: $('#scriptClear'), scriptHelp: $('#scriptHelp'), scriptStatus: $('#scriptStatus'), scriptHelpDialog: $('#scriptHelpDialog'), detailSidebar: $('#detailSidebar'), familyTitle: $('#familyTitle'), familyDescription: $('#familyDescription'), editFamilyNameButton: $('#editFamilyNameButton'), treeContext: $('#treeContext'), pushGenerationButton: $('#pushGenerationButton'), clearSelection: $('#clearSelection'), treeViewport: $('#treeViewport'), treeSvg: $('#familyTree'), treeLoading: $('#treeLoading'), undoButton: $('#undoButton'), redoButton: $('#redoButton'), generationRail: $('#generationRail'), editorDialog: $('#editorDialog'), memberForm: $('#memberForm'), formKicker: $('#formKicker'), formTitle: $('#formTitle'), formError: $('#formError'), formImagePreview: $('#formImagePreview'), relationshipDialog: $('#relationshipDialog'), relationshipForm: $('#relationshipForm'), relationshipTitle: $('#relationshipTitle'), relationSearch: $('#relationSearch'), relationshipOptions: $('#relationshipOptions'), relationshipTarget: $('#relationshipTarget'), confirmRelationship: $('#confirmRelationship'), settingsDialog: $('#settingsDialog'), settingsForm: $('#settingsForm'), settingsKicker: $('#settingsKicker'), settingsTitle: $('#settingsTitle'), rootPersonSelect: $('#rootPersonSelect'), exportDialog: $('#exportDialog'), passwordDialog: $('#passwordDialog'), passwordForm: $('#passwordForm'), passwordError: $('#passwordError'), importFile: $('#importFile'), saveDraftButton: $('#saveDraftButton'), toast: $('#toast')
+  brandName: $('#brandName'), saveStatus: $('#saveStatus'), memberSummary: $('#memberSummary'), memberSidebar: $('#memberSidebar'), clearMemberSearch: $('#clearMemberSearch'), memberList: $('#memberList'), memberSearch: $('#memberSearch'), listCount: $('#listCount'), sortMembers: $('#sortMembers'), validationBadge: $('#validationBadge'), validationSummary: $('#validationSummary'), validationDialog: $('#validationDialog'), validationContent: $('#validationContent'), driveLinkButton: $('#driveLinkButton'), driveLinkDialog: $('#driveLinkDialog'), driveLinkInput: $('#driveLinkInput'), driveLinkOutput: $('#driveLinkOutput'), driveLinkError: $('#driveLinkError'), copyDriveLinkButton: $('#copyDriveLinkButton'), copyDriveLinkLabel: $('#copyDriveLinkLabel'), scriptButton: $('#scriptButton'), clearMembersButton: $('#clearMembersButton'), scriptDialog: $('#scriptDialog'), scriptInput: $('#scriptInput'), scriptCheck: $('#scriptCheck'), scriptRun: $('#scriptRun'), scriptClear: $('#scriptClear'), scriptHelp: $('#scriptHelp'), scriptStatus: $('#scriptStatus'), scriptHelpDialog: $('#scriptHelpDialog'), detailSidebar: $('#detailSidebar'), familyTitle: $('#familyTitle'), familyDescription: $('#familyDescription'), editFamilyNameButton: $('#editFamilyNameButton'), treeContext: $('#treeContext'), pushGenerationButton: $('#pushGenerationButton'), clearSelection: $('#clearSelection'), treeViewport: $('#treeViewport'), treeSvg: $('#familyTree'), treeLoading: $('#treeLoading'), undoButton: $('#undoButton'), redoButton: $('#redoButton'), generationRail: $('#generationRail'), editorDialog: $('#editorDialog'), memberForm: $('#memberForm'), formKicker: $('#formKicker'), formTitle: $('#formTitle'), formError: $('#formError'), formImagePreview: $('#formImagePreview'), relationshipDialog: $('#relationshipDialog'), relationshipForm: $('#relationshipForm'), relationshipTitle: $('#relationshipTitle'), relationSearch: $('#relationSearch'), relationshipOptions: $('#relationshipOptions'), relationshipTarget: $('#relationshipTarget'), confirmRelationship: $('#confirmRelationship'), settingsDialog: $('#settingsDialog'), settingsForm: $('#settingsForm'), settingsKicker: $('#settingsKicker'), settingsTitle: $('#settingsTitle'), rootPersonSelect: $('#rootPersonSelect'), exportDialog: $('#exportDialog'), passwordDialog: $('#passwordDialog'), passwordForm: $('#passwordForm'), passwordError: $('#passwordError'), publishOnlineButton: $('#publishOnlineButton'), publishDialog: $('#publishDialog'), publishForm: $('#publishForm'), publishImages: $('#publishImages'), publishError: $('#publishError'), publishProgress: $('#publishProgress'), publishSubmitButton: $('#publishSubmitButton'), importFile: $('#importFile'), saveDraftButton: $('#saveDraftButton'), toast: $('#toast')
 };
-let data = clone(sampleData); let driveCopyTimer; let graph; let renderer; let selectedPersonId = null; let profilePersonId = null; let activeGeneration = null; let editingId = null; let relationType = null; let relationSelectedIds = new Set(); let past = []; let future = []; let dirty = false; let toastTimer; let settingsNameOnly = false; let scriptSeedLoaded = false;
+let data = clone(sampleData); let driveCopyTimer; let graph; let renderer; let selectedPersonId = null; let profilePersonId = null; let activeGeneration = null; let editingId = null; let relationType = null; let relationSelectedIds = new Set(); let past = []; let future = []; let dirty = false; let toastTimer; let settingsNameOnly = false; let scriptSeedLoaded = false; let publishTokenSession = '';
 
 function normaliseData(candidate) {
   const next = clone(candidate || {});
@@ -166,6 +167,60 @@ function download(filename, content, type = 'application/json') { const blob = n
 function exportJson() { const result = renderValidation(); if (result.errors.length) { els.exportDialog.close(); els.validationDialog.showModal(); return; } if (!confirm('File JSON chứa dữ liệu gia phả dạng plaintext. Chỉ dùng làm bản sao lưu an toàn, không đưa trực tiếp lên GitHub Pages public repository. Tiếp tục?')) return; download(`family-backup-${today()}.json`, JSON.stringify(getExportData(), null, 2)); markSaved(); showToast('Đã xuất family.json.'); els.exportDialog.close(); }
 async function exportEncrypted() { const result = renderValidation(); if (result.errors.length) { els.exportDialog.close(); els.validationDialog.showModal(); return; } els.exportDialog.close(); els.passwordForm.reset(); els.passwordError.textContent = ''; els.passwordDialog.showModal(); }
 async function handlePassword(event) { event.preventDefault(); const form = new FormData(els.passwordForm); const password = form.get('password'); const confirmPassword = form.get('confirmPassword'); if (password.length < 8 || password !== confirmPassword) { els.passwordError.textContent = password.length < 8 ? 'Mật khẩu cần ít nhất 8 ký tự.' : 'Mật khẩu nhập lại chưa khớp.'; return; } try { const encrypted = await encryptData(getExportData(), password); download(`family-data-${today()}.enc`, encrypted, 'text/plain'); els.passwordDialog.close(); markSaved(); showToast('Đã xuất data.enc bằng AES-GCM.'); } catch { els.passwordError.textContent = 'Không thể mã hóa dữ liệu trong trình duyệt này.'; } }
+function openPublishDialog() {
+  els.publishForm.reset();
+  els.publishError.textContent = '';
+  els.publishProgress.textContent = '';
+  if (publishTokenSession) {
+    els.publishForm.elements.publishToken.value = publishTokenSession;
+    els.publishForm.elements.rememberToken.checked = true;
+  }
+  els.publishDialog.showModal();
+  setTimeout(() => els.publishForm.elements.publishToken.focus(), 40);
+}
+function publishErrorMessage(error) {
+  if (error?.status === 401 || error?.status === 403) return 'Publish Token không đúng hoặc không có quyền cập nhật.';
+  if (error?.message === 'remote-not-configured' || error?.message === 'remote-disabled') return 'Chưa cấu hình Worker trong remote-config.js.';
+  if (error?.message?.startsWith('image-name-invalid:')) return `Tên ảnh không đúng quy tắc: ${error.message.slice('image-name-invalid:'.length)}`;
+  if (error?.message?.startsWith('image-too-large:')) return `Ảnh vượt quá kích thước cho phép: ${error.message.slice('image-too-large:'.length)}`;
+  if (error?.name === 'AbortError' || error?.message === 'Failed to fetch') return 'Không thể kết nối Worker. Dữ liệu local vẫn an toàn.';
+  return 'Không thể cập nhật online. Dữ liệu local vẫn an toàn.';
+}
+async function handlePublish(event) {
+  event.preventDefault();
+  if (event.submitter?.value === 'cancel') { els.publishDialog.close(); return; }
+  const validation = renderValidation();
+  if (validation.errors.length) { els.publishDialog.close(); els.validationDialog.showModal(); return; }
+  const form = new FormData(els.publishForm);
+  const token = String(form.get('publishToken') || '').trim();
+  const password = String(form.get('password') || '');
+  const confirmPassword = String(form.get('confirmPassword') || '');
+  if (!token) { els.publishError.textContent = 'Hãy nhập Publish Token.'; return; }
+  if (password.length < 8 || password !== confirmPassword) { els.publishError.textContent = password.length < 8 ? 'Mật khẩu cần ít nhất 8 ký tự.' : 'Mật khẩu nhập lại chưa khớp.'; return; }
+  const files = [...(els.publishImages.files || [])];
+  const knownNames = new Set(data.members.map((item) => getMemberImageFilename(item)).filter(Boolean));
+  const unknownFiles = files.filter((file) => !knownNames.has(file.name.toLowerCase()));
+  if (unknownFiles.length) { els.publishError.textContent = `Ảnh không khớp filename thành viên: ${unknownFiles.map((file) => file.name).join(', ')}`; return; }
+  els.publishSubmitButton.disabled = true;
+  els.publishError.textContent = '';
+  els.publishProgress.textContent = 'Đang validate và mã hóa data.enc…';
+  try {
+    const encryptedText = await encryptData(getExportData(), password);
+    els.publishProgress.textContent = files.length ? `Đang upload dữ liệu và ${files.length} ảnh…` : 'Đang upload data.enc…';
+    const result = await publishFamilyData({ encryptedText, token, imageFiles: files });
+    if (form.get('rememberToken') === 'on') publishTokenSession = token;
+    els.publishProgress.textContent = `Đã cập nhật phiên bản ${result.version}.`;
+    els.saveStatus.textContent = 'Đã cập nhật online · hãy export data.enc cho Git';
+    els.publishDialog.close();
+    showToast('Đã cập nhật Online. Bản local vẫn được giữ nguyên.');
+  } catch (error) {
+    console.error('Online publish failed:', error);
+    els.publishError.textContent = publishErrorMessage(error);
+    els.publishProgress.textContent = '';
+  } finally {
+    els.publishSubmitButton.disabled = false;
+  }
+}
 async function importFile(file) { const text = await file.text(); let imported; if (file.name.toLowerCase().endsWith('.enc')) { const password = prompt('Nhập mật khẩu để mở data.enc:'); if (!password) return; try { imported = await decryptData(text, password); } catch { showToast('Mật khẩu sai hoặc file data.enc không hợp lệ.'); return; } } else { try { imported = JSON.parse(text); } catch { showToast('File JSON không hợp lệ.'); return; } } const candidate = normaliseData(imported); const result = validateFamily(candidate); data = candidate; localStorage.removeItem(draftStorageKey); clearRecovery(); selectedPersonId = null; profilePersonId = null; past = []; future = []; dirty = false; refresh(); if (result.errors.length) { els.validationDialog.showModal(); showToast(`Đã nhập dữ liệu với ${result.errors.length} lỗi cần xử lý.`); } else showToast(`Đã nhập ${candidate.members.length} thành viên.`); }
 const starterScript = `# Ví dụ tối thiểu
 p A "Nguyễn Văn A" {
@@ -367,6 +422,7 @@ function closeSidebar() { els.memberSidebar.classList.remove('is-open'); }
 function init() { const restoredDraft = restoreDraft(); const recoveredDraft = restoreRecovery(); renderer = new TreeRenderer(els.treeSvg, els.treeViewport, (id) => selectPerson(id), (id) => selectPerson(id), updateRail); renderer.render(buildFamilyGraph(data)); refresh(); requestAnimationFrame(() => { renderer.fit(false); els.treeLoading.classList.add('is-done'); if (recoveredDraft) showToast('Đã khôi phục bản recovery chưa lưu.'); else if (restoredDraft) showToast('Đã khôi phục bản lưu tạm.'); }); }
 
 els.driveLinkButton?.addEventListener('click', openDriveLinkDialog); els.driveLinkInput?.addEventListener('input', updateDriveLinkConversion); els.copyDriveLinkButton?.addEventListener('click', copyDriveLink); $('#addMemberButton').addEventListener('click', () => openMemberEditor()); $('#memberSearch').addEventListener('input', renderMemberList); $('#clearMemberSearch').addEventListener('click', () => { els.memberSearch.value = ''; renderMemberList(); els.memberSearch.focus(); }); $('#sortMembers').addEventListener('change', renderMemberList); $('#validationLink').addEventListener('click', () => { renderValidation(); els.validationDialog.showModal(); }); $('#undoButton').addEventListener('click', undo); $('#redoButton').addEventListener('click', redo); els.saveDraftButton?.addEventListener('click', saveDraft); $('#importButton').addEventListener('click', () => els.importFile.click()); els.importFile.addEventListener('change', () => { const file = els.importFile.files[0]; if (file) importFile(file); els.importFile.value = ''; }); $('#exportButton').addEventListener('click', () => els.exportDialog.showModal()); $('#pushGenerationButton').addEventListener('click', pushAllGenerations); $('#settingsButton').addEventListener('click', openSettings); els.editFamilyNameButton.addEventListener('click', () => openSettings(true)); $('#openSidebar').addEventListener('click', () => els.memberSidebar.classList.add('is-open')); $('#closeSidebar').addEventListener('click', closeSidebar); $('#clearSelection').addEventListener('click', () => { selectedPersonId = null; profilePersonId = null; activeGeneration = null; renderer?.fit(); refreshSelection(); renderDetail(null); }); $('#zoomInButton').addEventListener('click', () => renderer?.zoomAt(1.18)); $('#zoomOutButton').addEventListener('click', () => renderer?.zoomAt(.84)); $('#fitButton').addEventListener('click', () => { activeGeneration = null; renderer?.fit(); updateRail(); }); els.scriptButton?.addEventListener('click', openScriptEditor); els.clearMembersButton?.addEventListener('click', clearAllMembers); els.scriptCheck?.addEventListener('click', checkScript); els.scriptRun?.addEventListener('click', runScript); els.scriptClear?.addEventListener('click', () => { els.scriptInput.value = ''; scriptSeedLoaded = true; renderScriptAnalysis({ ok: false, diagnostics: [], warnings: [], summary: null }); els.scriptStatus.className = 'script-status'; els.scriptStatus.innerHTML = '<strong>Script đã được xóa</strong><span>Nhập dữ liệu rồi bấm Kiểm tra.</span>'; els.scriptInput.focus(); }); els.scriptHelp?.addEventListener('click', () => els.scriptHelpDialog.showModal()); els.memberForm.addEventListener('submit', saveMember); els.memberForm.addEventListener('input', (event) => { formatDateInput(event); updateFormImage(); }); els.relationshipForm.addEventListener('submit', saveRelationship); els.relationSearch.addEventListener('input', renderRelationshipOptions); els.settingsForm.addEventListener('submit', saveSettings); els.passwordForm.addEventListener('submit', handlePassword); $$('[data-export="json"]').forEach((button) => button.addEventListener('click', exportJson)); $$('[data-export="enc"]').forEach((button) => button.addEventListener('click', exportEncrypted));
+els.publishOnlineButton?.addEventListener('click', openPublishDialog); els.publishForm?.addEventListener('submit', handlePublish);
 const dialogGestureState = new WeakMap();
 document.querySelectorAll('dialog').forEach((dialog) => {
   dialog.addEventListener('pointerdown', (event) => {
